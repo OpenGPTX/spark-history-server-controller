@@ -1,0 +1,6 @@
+apiVersion: kubricks.kubricks.io/v1
+kind: SparkHistoryServer
+metadata:
+  name: sparkhistoryserver-sample
+spec:
+  # TODO(user): Add fields here

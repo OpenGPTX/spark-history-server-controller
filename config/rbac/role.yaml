@@ -1,0 +1,45 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - api.core.v1
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kubricks.kubricks.io
+  resources:
+  - sparkhistoryservers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kubricks.kubricks.io
+  resources:
+  - sparkhistoryservers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - kubricks.kubricks.io
+  resources:
+  - sparkhistoryservers/status
+  verbs:
+  - get
+  - patch
+  - update
