@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -30,6 +31,10 @@ type SparkHistoryServerSpec struct {
 
 	// Foo is an example field of SparkHistoryServer. Edit sparkhistoryserver_types.go to remove/update
 	Foo string `json:"foo,omitempty"`
+
+	// resources to specify the limit and the requests of the pod(s)
+	// https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // SparkHistoryServerStatus defines the observed state of SparkHistoryServer

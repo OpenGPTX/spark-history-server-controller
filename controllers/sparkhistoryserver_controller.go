@@ -39,7 +39,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"k8s.io/apimachinery/pkg/api/resource"
 	kubricksv1 "kubricks.io/sparkhistoryserver/api/v1"
 )
 
@@ -186,11 +185,12 @@ func (r *SparkHistoryServerReconciler) CreateDeployment(ctx context.Context, req
 								},
 							},
 							ImagePullPolicy: corev1.PullIfNotPresent,
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU: resource.MustParse("1000m"), //sparkhistoryserver.Spec.CPURequest, // https://github.com/GoogleCloudPlatform/flink-on-k8s-operator/blob/master/controllers/flinkcluster_converter_test.go
-								},
-							},
+							Resources:       *sparkhistoryserver.Spec.Resources,
+							// Resources: corev1.ResourceRequirements{
+							// 	Requests: corev1.ResourceList{
+							// 		corev1.ResourceCPU: resource.MustParse("1000m"), //sparkhistoryserver.Spec.CPURequest, // https://github.com/GoogleCloudPlatform/flink-on-k8s-operator/blob/master/controllers/flinkcluster_converter_test.go
+							// 	},
+							// },
 							Command: []string{
 								"/bin/sh",
 								"-c",
