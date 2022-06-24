@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -139,7 +140,16 @@ func (r *SparkHistoryServerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 // CreateDeployment creates the deployment in the cluster.
 func (r *SparkHistoryServerReconciler) CreateDeployment(ctx context.Context, req ctrl.Request, sparkhistoryserver kubricksv1.SparkHistoryServer, log logr.Logger) (ctrl.Result, error) {
 
-	var inlineCode = "export SPARK_HISTORY_OPTS=\"$SPARK_HISTORY_OPTS \\\n  -Dspark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \\\n  -Dspark.ui.proxyBase=/sparkhistory/" + req.Namespace + " \\\n  -Dspark.ui.reverseProxy=true \\\n  -Dspark.ui.reverseProxyUrl=https://kubeflow.at.onplural.sh/sparkhistory/" + req.Namespace + " \\\n  -Dspark.hadoop.fs.s3a.aws.credentials.provider=com.amazonaws.auth.WebIdentityTokenCredentialsProvider \\\n  -Dspark.history.fs.logDirectory=s3a://at-plural-sh-at-onplural-sh-kubeflow-pipelines/pipelines/" + req.Namespace + "/history\";\n/opt/spark/bin/spark-class org.apache.spark.deploy.history.HistoryServer;\n"
+	var historyCommand = "export SPARK_HISTORY_OPTS=\"$SPARK_HISTORY_OPTS \\\n"
+	historyCommand += "  -Dspark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \\\n"
+	historyCommand += "  -Dspark.hadoop.fs.s3a.aws.credentials.provider=com.amazonaws.auth.WebIdentityTokenCredentialsProvider \\\n"
+	historyCommand += "  -Dspark.history.fs.logDirectory=s3a://" + sparkhistoryserver.Spec.Bucket + "/pipelines/" + req.Namespace + "/history \\\n"
+	historyCommand += "  -Dspark.ui.proxyBase=/sparkhistory/" + req.Namespace + " \\\n"
+	//	historyCommand += "  -Dspark.ui.reverseProxy=true \\\n"
+	//	historyCommand += "  -Dspark.ui.reverseProxyUrl=https://kubeflow.at.onplural.sh/sparkhistory/" + req.Namespace + " \\\n"
+	historyCommand += "  -Dspark.history.fs.cleaner.enabled=" + strconv.FormatBool(sparkhistoryserver.Spec.Cleaner.Enabled) + " \\\n"
+	historyCommand += "  -Dspark.history.fs.cleaner.maxAge=" + sparkhistoryserver.Spec.Cleaner.MaxAge + "\";\n"
+	historyCommand += "/opt/spark/bin/spark-class org.apache.spark.deploy.history.HistoryServer;\n"
 
 	var sparkhistoryserverDeployment *appsv1.Deployment
 	sparkhistoryserverDeployment = &appsv1.Deployment{
@@ -152,7 +162,7 @@ func (r *SparkHistoryServerReconciler) CreateDeployment(ctx context.Context, req
 			Namespace: req.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			//Replicas: sparkhistoryserver.Spec.MinReplica,
+			Replicas: sparkhistoryserver.Spec.Replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app.kubernetes.io/name":     req.Name,
@@ -167,7 +177,7 @@ func (r *SparkHistoryServerReconciler) CreateDeployment(ctx context.Context, req
 					},
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: "default-editor",
+					ServiceAccountName: sparkhistoryserver.Spec.ServiceAccountName,
 					Containers: []corev1.Container{
 						corev1.Container{
 							Name: sparkhistoryserver.Name,
@@ -177,14 +187,14 @@ func (r *SparkHistoryServerReconciler) CreateDeployment(ctx context.Context, req
 									Value: "false",
 								},
 							},
-							Image: "public.ecr.aws/atcommons/sparkhistoryserver:14469", //sparkhistoryserver.Spec.Image,
+							Image: sparkhistoryserver.Spec.Image,
 							Ports: []corev1.ContainerPort{
 								{
-									ContainerPort: 18080, //sparkhistoryserver.Spec.Port,
+									ContainerPort: 18080,
 									Name:          "historyport",
 								},
 							},
-							ImagePullPolicy: corev1.PullIfNotPresent,
+							ImagePullPolicy: sparkhistoryserver.Spec.ImagePullPolicy, //corev1.PullIfNotPresent,
 							Resources:       *sparkhistoryserver.Spec.Resources,
 							// Resources: corev1.ResourceRequirements{
 							// 	Requests: corev1.ResourceList{
@@ -194,7 +204,7 @@ func (r *SparkHistoryServerReconciler) CreateDeployment(ctx context.Context, req
 							Command: []string{
 								"/bin/sh",
 								"-c",
-								string(inlineCode),
+								string(historyCommand),
 							},
 						},
 					},

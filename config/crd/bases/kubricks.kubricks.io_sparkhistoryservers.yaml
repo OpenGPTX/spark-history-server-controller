@@ -36,13 +36,52 @@ spec:
           spec:
             description: SparkHistoryServerSpec defines the desired state of SparkHistoryServer
             properties:
-              foo:
-                description: Foo is an example field of SparkHistoryServer. Edit sparkhistoryserver_types.go
-                  to remove/update
+              bucket:
+                description: Bucket name (not the full folder path) where the sparkhistoryserver
+                  should look at
                 type: string
+              cleaner:
+                default:
+                  enabled: true
+                  maxAge: 30d
+                description: 'Configures the "cleaner" feature of sparkhistoryserver,
+                  a.k.a. logretention or logrotation More info: https://spark.apache.org/docs/latest/monitoring.html#spark-history-server-configuration-options'
+                properties:
+                  enabled:
+                    default: true
+                    description: 'Specifies whether the History Server should periodically
+                      clean up event logs from storage. More info: https://spark.apache.org/docs/latest/monitoring.html#spark-history-server-configuration-options'
+                    type: boolean
+                  maxAge:
+                    default: 30d
+                    description: 'Job history files older than this will be deleted
+                      when the filesystem history cleaner runs. More info: https://spark.apache.org/docs/latest/monitoring.html#spark-history-server-configuration-options'
+                    type: string
+                type: object
+              image:
+                description: 'Container image name. More info: https://kubernetes.io/docs/concepts/containers/images'
+                type: string
+              imagePullPolicy:
+                default: IfNotPresent
+                description: 'Image pull policy. One of Always, Never, IfNotPresent.
+                  More info: https://kubernetes.io/docs/concepts/containers/images#updating-images'
+                type: string
+              replicas:
+                default: 1
+                description: 'Replicas is the number of desired replicas. More info:
+                  https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#what-is-a-replicationcontroller'
+                format: int32
+                type: integer
               resources:
-                description: resources to specify the limit and the requests of the
-                  pod(s) https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/
+                default:
+                  limits:
+                    cpu: 1000m
+                    memory: 1Gi
+                  requests:
+                    cpu: 100m
+                    memory: 512Mi
+                description: 'Compute Resources required by this container. More info:
+                  https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                 properties:
                   limits:
                     additionalProperties:
@@ -67,6 +106,11 @@ spec:
                       to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                     type: object
                 type: object
+              serviceAccountName:
+                default: default-editor
+                description: 'ServiceAccountName is the name of the ServiceAccount
+                  to use to run this pod. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/'
+                type: string
             type: object
           status:
             description: SparkHistoryServerStatus defines the observed state of SparkHistoryServer
