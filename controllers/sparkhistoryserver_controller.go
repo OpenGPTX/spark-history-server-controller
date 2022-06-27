@@ -25,6 +25,8 @@ import (
 	"strconv"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/go-logr/logr"
 	reconcilehelper "github.com/kubeflow/kubeflow/components/common/reconcilehelper"
 	appsv1 "k8s.io/api/apps/v1"
@@ -87,11 +89,11 @@ func (r *SparkHistoryServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return r.RemoveDeployment(ctx, &websitesDeployment, log)
 		}
 
-		// Delete service if it exists
-		var sparkhistoryserverService corev1.Service
-		if err := r.Get(ctx, req.NamespacedName, &sparkhistoryserverService); err == nil {
-			return r.RemoveService(ctx, &sparkhistoryserverService, log)
-		}
+		// // Delete service if it exists
+		// var sparkhistoryserverService corev1.Service
+		// if err := r.Get(ctx, req.NamespacedName, &sparkhistoryserverService); err == nil {
+		// 	return r.RemoveService(ctx, &sparkhistoryserverService, log)
+		// }
 
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -104,24 +106,20 @@ func (r *SparkHistoryServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 		// Create a deployment
 		return r.CreateDeployment(ctx, req, sparkhistoryserver, log)
 	}
-	// Ensure that at least minimum number of replicas are maintained
 
-	// Ensure that the service is created for the sparkhistoryserver
-	log.Info("Ensuring Service is created", "sparkhistoryserver", req.NamespacedName)
-	var sparkhistoryserverService corev1.Service
-	if err := r.Get(ctx, req.NamespacedName, &sparkhistoryserverService); err != nil {
-		log.Info("unable to fetch Deployment for sparkhistoryserver", "sparkhistoryserver", req.NamespacedName)
-		// Create the service
-		return r.CreateService(ctx, req, sparkhistoryserver, log)
-	}
-
-	// Reconcile virtual service.
-	err := r.reconcileVirtualService(&sparkhistoryserver, log)
+	// Reconcile Service.
+	err := r.reconcileService(ctx, req, &sparkhistoryserver, log)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Reconcile envoy filter.
+	// Reconcile VirtualService.
+	err = r.reconcileVirtualService(&sparkhistoryserver, log)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Reconcile EnvoyFilter.
 	err = r.reconcileEnvoyFilter(req, &sparkhistoryserver, log)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -194,7 +192,7 @@ func (r *SparkHistoryServerReconciler) CreateDeployment(ctx context.Context, req
 									Name:          "historyport",
 								},
 							},
-							ImagePullPolicy: sparkhistoryserver.Spec.ImagePullPolicy, //corev1.PullIfNotPresent,
+							ImagePullPolicy: sparkhistoryserver.Spec.ImagePullPolicy,
 							Resources:       *sparkhistoryserver.Spec.Resources,
 							// Resources: corev1.ResourceRequirements{
 							// 	Requests: corev1.ResourceList{
@@ -543,4 +541,65 @@ func CopyEnvoyFilter(from, to *unstructured.Unstructured) bool {
 		unstructured.SetNestedMap(to.Object, fromSpec, "spec")
 	}
 	return requiresUpdate
+}
+
+// Generates Service from CR SparkHistoryServer
+func generateService(instance *kubricksv1.SparkHistoryServer) (*corev1.Service, error) {
+	var sparkhistoryserverService *corev1.Service
+	sparkhistoryserverService = &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				"app.kubernetes.io/name":     instance.Name,
+				"app.kubernetes.io/instance": instance.Namespace,
+			},
+			Name:      instance.Name,
+			Namespace: instance.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http",
+					Port:       18080,
+					TargetPort: intstr.FromString("historyport"),
+					Protocol:   "TCP",
+				},
+			},
+			Selector: map[string]string{
+				"app.kubernetes.io/name":     instance.Name,
+				"app.kubernetes.io/instance": instance.Namespace,
+			},
+		},
+	}
+
+	return sparkhistoryserverService, nil
+}
+
+func (r *SparkHistoryServerReconciler) reconcileService(ctx context.Context, req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
+	log.Info("Updating Service")
+	service, err := generateService(instance)
+	if err := ctrl.SetControllerReference(instance, service, r.Scheme); err != nil {
+		return err
+	}
+
+	var foundService corev1.Service
+	if err = r.Get(ctx, req.NamespacedName, &foundService); err != nil {
+		if errors.IsNotFound(err) {
+			if err = r.Create(ctx, service); err != nil {
+				return err
+			}
+			log.Info("Service created")
+		} else {
+			log.Info("Failed to get Service")
+			return err
+		}
+	} else if !reflect.DeepEqual(service.Spec, foundService.Spec) {
+		service.ObjectMeta = foundService.ObjectMeta
+		service.Spec.ClusterIP = foundService.Spec.ClusterIP
+		if err = r.Update(context.TODO(), service); err != nil {
+			return err
+		}
+		log.Info("Service updated")
+	}
+
+	return nil
 }
