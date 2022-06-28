@@ -23,7 +23,6 @@ import (
 	"os"
 	"reflect"
 	"strconv"
-	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 
@@ -80,35 +79,19 @@ func (r *SparkHistoryServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Get the sparkhistoryserver object on which reconcile is called
 	var sparkhistoryserver kubricksv1.SparkHistoryServer
 	if err := r.Get(ctx, req.NamespacedName, &sparkhistoryserver); err != nil {
-		//log.Error(err, "unable to fetch Sparkhistoryserver")
 		log.Info("Unable to fetch Sparkhistoryserver", "Error", err)
-
-		// Delete Deployment if it exists
-		var websitesDeployment appsv1.Deployment
-		if err := r.Get(ctx, req.NamespacedName, &websitesDeployment); err == nil {
-			return r.RemoveDeployment(ctx, &websitesDeployment, log)
-		}
-
-		// // Delete service if it exists
-		// var sparkhistoryserverService corev1.Service
-		// if err := r.Get(ctx, req.NamespacedName, &sparkhistoryserverService); err == nil {
-		// 	return r.RemoveService(ctx, &sparkhistoryserverService, log)
-		// }
 
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// If we have the sparkhistoryserver resource we need to ensure that the child resources are created as well.
-	log.Info("Ensuring Deployment is created", "sparkhistoryserver", req.NamespacedName)
-	var sparkhistoryserverDeployment appsv1.Deployment
-	if err := r.Get(ctx, req.NamespacedName, &sparkhistoryserverDeployment); err != nil {
-		log.Info("unable to fetch Deployment for sparkhistoryserver", "sparkhistoryserver", req.NamespacedName)
-		// Create a deployment
-		return r.CreateDeployment(ctx, req, sparkhistoryserver, log)
+	// Reconcile Deployment.
+	err := r.reconcileDeployment(ctx, req, &sparkhistoryserver, log)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Reconcile Service.
-	err := r.reconcileService(ctx, req, &sparkhistoryserver, log)
+	err = r.reconcileService(ctx, req, &sparkhistoryserver, log)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -133,148 +116,6 @@ func (r *SparkHistoryServerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kubricksv1.SparkHistoryServer{}).
 		Complete(r)
-}
-
-// CreateDeployment creates the deployment in the cluster.
-func (r *SparkHistoryServerReconciler) CreateDeployment(ctx context.Context, req ctrl.Request, sparkhistoryserver kubricksv1.SparkHistoryServer, log logr.Logger) (ctrl.Result, error) {
-
-	var historyCommand = "export SPARK_HISTORY_OPTS=\"$SPARK_HISTORY_OPTS \\\n"
-	historyCommand += "  -Dspark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \\\n"
-	historyCommand += "  -Dspark.hadoop.fs.s3a.aws.credentials.provider=com.amazonaws.auth.WebIdentityTokenCredentialsProvider \\\n"
-	historyCommand += "  -Dspark.history.fs.logDirectory=s3a://" + sparkhistoryserver.Spec.Bucket + "/pipelines/" + req.Namespace + "/history \\\n"
-	historyCommand += "  -Dspark.ui.proxyBase=/sparkhistory/" + req.Namespace + " \\\n"
-	//	historyCommand += "  -Dspark.ui.reverseProxy=true \\\n"
-	//	historyCommand += "  -Dspark.ui.reverseProxyUrl=https://kubeflow.at.onplural.sh/sparkhistory/" + req.Namespace + " \\\n"
-	historyCommand += "  -Dspark.history.fs.cleaner.enabled=" + strconv.FormatBool(sparkhistoryserver.Spec.Cleaner.Enabled) + " \\\n"
-	historyCommand += "  -Dspark.history.fs.cleaner.maxAge=" + sparkhistoryserver.Spec.Cleaner.MaxAge + "\";\n"
-	historyCommand += "/opt/spark/bin/spark-class org.apache.spark.deploy.history.HistoryServer;\n"
-
-	var sparkhistoryserverDeployment *appsv1.Deployment
-	sparkhistoryserverDeployment = &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				"app.kubernetes.io/name":     req.Name,
-				"app.kubernetes.io/instance": req.Namespace,
-			},
-			Name:      req.Name,
-			Namespace: req.Namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: sparkhistoryserver.Spec.Replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app.kubernetes.io/name":     req.Name,
-					"app.kubernetes.io/instance": req.Namespace,
-				},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app.kubernetes.io/name":     req.Name,
-						"app.kubernetes.io/instance": req.Namespace,
-					},
-				},
-				Spec: corev1.PodSpec{
-					ServiceAccountName: sparkhistoryserver.Spec.ServiceAccountName,
-					Containers: []corev1.Container{
-						corev1.Container{
-							Name: sparkhistoryserver.Name,
-							Env: []corev1.EnvVar{
-								{
-									Name:  "SPARK_NO_DAEMONIZE",
-									Value: "false",
-								},
-							},
-							Image: sparkhistoryserver.Spec.Image,
-							Ports: []corev1.ContainerPort{
-								{
-									ContainerPort: 18080,
-									Name:          "historyport",
-								},
-							},
-							ImagePullPolicy: sparkhistoryserver.Spec.ImagePullPolicy,
-							Resources:       *sparkhistoryserver.Spec.Resources,
-							// Resources: corev1.ResourceRequirements{
-							// 	Requests: corev1.ResourceList{
-							// 		corev1.ResourceCPU: resource.MustParse("1000m"), //sparkhistoryserver.Spec.CPURequest, // https://github.com/GoogleCloudPlatform/flink-on-k8s-operator/blob/master/controllers/flinkcluster_converter_test.go
-							// 	},
-							// },
-							Command: []string{
-								"/bin/sh",
-								"-c",
-								string(historyCommand),
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	if err := r.Create(ctx, sparkhistoryserverDeployment); err != nil {
-		log.Error(err, "unable to create website deployment for Website", "website", sparkhistoryserverDeployment)
-		return ctrl.Result{}, err
-	}
-
-	log.V(1).Info("created website deployment for Website run", "websitePod", sparkhistoryserverDeployment)
-	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-}
-
-// RemoveDeployment deletes deployment from the cluster
-func (r *SparkHistoryServerReconciler) RemoveDeployment(ctx context.Context, deplmtToRemove *appsv1.Deployment, log logr.Logger) (ctrl.Result, error) {
-	name := deplmtToRemove.Name
-	if err := r.Delete(ctx, deplmtToRemove); err != nil {
-		log.Error(err, "unable to delete website deployment for Website", "website", deplmtToRemove.Name)
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Removed website deployment for Website run", "websitePod", name)
-	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-}
-
-// CreateService creates the desired service in the cluster
-func (r *SparkHistoryServerReconciler) CreateService(ctx context.Context, req ctrl.Request, sparkhistoryserver kubricksv1.SparkHistoryServer, log logr.Logger) (ctrl.Result, error) {
-	var sparkhistoryserverService *corev1.Service
-	sparkhistoryserverService = &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				"app.kubernetes.io/name":     req.Name,
-				"app.kubernetes.io/instance": req.Namespace,
-			},
-			Name:      req.Name,
-			Namespace: req.Namespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "http",
-					Port:       18080,
-					TargetPort: intstr.FromString("historyport"),
-					Protocol:   "TCP",
-				},
-			},
-			Selector: map[string]string{
-				"app.kubernetes.io/name":     req.Name,
-				"app.kubernetes.io/instance": req.Namespace,
-			},
-		},
-	}
-	if err := r.Create(ctx, sparkhistoryserverService); err != nil {
-		log.Error(err, "unable to create sparkhistoryserver service for sparkhistoryserver", "sparkhistoryserver", sparkhistoryserverService)
-		return ctrl.Result{}, err
-	}
-
-	log.V(1).Info("created sparkhistoryserver service for sparkhistoryserver run", "sparkhistoryserverPod", sparkhistoryserverService)
-	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-}
-
-// RemoveService deletes the service from the cluster.
-func (r *SparkHistoryServerReconciler) RemoveService(ctx context.Context, serviceToRemove *corev1.Service, log logr.Logger) (ctrl.Result, error) {
-	name := serviceToRemove.Name
-	if err := r.Delete(ctx, serviceToRemove); err != nil {
-		log.Error(err, "unable to delete sparkhistoryserver service for sparkhistoryserver", "sparkhistoryserver", serviceToRemove.Name)
-		return ctrl.Result{}, err
-	}
-	log.V(1).Info("Removed sparkhistoryserver service for sparkhistoryserver run", "sparkhistoryserverPod", name)
-	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
 func virtualServiceName(kfName string, namespace string) string {
@@ -599,6 +440,109 @@ func (r *SparkHistoryServerReconciler) reconcileService(ctx context.Context, req
 			return err
 		}
 		log.Info("Service updated")
+	}
+
+	return nil
+}
+
+// Generates Deployment from CR SparkHistoryServer
+func generateDeployment(instance *kubricksv1.SparkHistoryServer) (*appsv1.Deployment, error) {
+
+	var historyCommand = "export SPARK_HISTORY_OPTS=\"$SPARK_HISTORY_OPTS \\\n"
+	historyCommand += "  -Dspark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \\\n"
+	historyCommand += "  -Dspark.hadoop.fs.s3a.aws.credentials.provider=com.amazonaws.auth.WebIdentityTokenCredentialsProvider \\\n"
+	historyCommand += "  -Dspark.history.fs.logDirectory=s3a://" + instance.Spec.Bucket + "/pipelines/" + instance.Namespace + "/history \\\n"
+	historyCommand += "  -Dspark.ui.proxyBase=/sparkhistory/" + instance.Namespace + " \\\n"
+	//	historyCommand += "  -Dspark.ui.reverseProxy=true \\\n"
+	//	historyCommand += "  -Dspark.ui.reverseProxyUrl=https://kubeflow.at.onplural.sh/sparkhistory/" + req.Namespace + " \\\n"
+	historyCommand += "  -Dspark.history.fs.cleaner.enabled=" + strconv.FormatBool(instance.Spec.Cleaner.Enabled) + " \\\n"
+	historyCommand += "  -Dspark.history.fs.cleaner.maxAge=" + instance.Spec.Cleaner.MaxAge + "\";\n"
+	historyCommand += "/opt/spark/bin/spark-class org.apache.spark.deploy.history.HistoryServer;\n"
+
+	var sparkhistoryserverDeployment *appsv1.Deployment
+	sparkhistoryserverDeployment = &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				"app.kubernetes.io/name":     instance.Name,
+				"app.kubernetes.io/instance": instance.Namespace,
+			},
+			Name:      instance.Name,
+			Namespace: instance.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: instance.Spec.Replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app.kubernetes.io/name":     instance.Name,
+					"app.kubernetes.io/instance": instance.Namespace,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app.kubernetes.io/name":     instance.Name,
+						"app.kubernetes.io/instance": instance.Namespace,
+					},
+				},
+				Spec: corev1.PodSpec{
+					ServiceAccountName: instance.Spec.ServiceAccountName,
+					Containers: []corev1.Container{
+						corev1.Container{
+							Name: instance.Name,
+							Env: []corev1.EnvVar{
+								{
+									Name:  "SPARK_NO_DAEMONIZE",
+									Value: "false",
+								},
+							},
+							Image: instance.Spec.Image,
+							Ports: []corev1.ContainerPort{
+								{
+									ContainerPort: 18080,
+									Name:          "historyport",
+								},
+							},
+							ImagePullPolicy: instance.Spec.ImagePullPolicy,
+							Resources:       *instance.Spec.Resources,
+							Command: []string{
+								"/bin/sh",
+								"-c",
+								string(historyCommand),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return sparkhistoryserverDeployment, nil
+}
+
+func (r *SparkHistoryServerReconciler) reconcileDeployment(ctx context.Context, req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
+	log.Info("Updating Deployment")
+	deployment, err := generateDeployment(instance)
+	if err := ctrl.SetControllerReference(instance, deployment, r.Scheme); err != nil {
+		return err
+	}
+
+	var foundDeployment appsv1.Deployment
+	if err = r.Get(ctx, req.NamespacedName, &foundDeployment); err != nil {
+		if errors.IsNotFound(err) {
+			if err = r.Create(ctx, deployment); err != nil {
+				return err
+			}
+			log.Info("Deployment created")
+		} else {
+			log.Info("Failed to get Deployment")
+			return err
+		}
+	} else if !reflect.DeepEqual(deployment.Spec, foundDeployment.Spec) {
+		deployment.ObjectMeta = foundDeployment.ObjectMeta
+		if err = r.Update(context.TODO(), deployment); err != nil {
+			return err
+		}
+		log.Info("Deployment updated")
 	}
 
 	return nil
