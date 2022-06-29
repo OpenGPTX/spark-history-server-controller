@@ -18,13 +18,10 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
 	"strconv"
-
-	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/go-logr/logr"
 	reconcilehelper "github.com/kubeflow/kubeflow/components/common/reconcilehelper"
@@ -45,6 +42,7 @@ import (
 )
 
 const DefaultServingPort = 18080
+const DefaultServingPortName = "historyport"
 const AnnotationRewriteURI = "notebooks.kubeflow.org/http-rewrite-uri"
 const AnnotationHeadersRequestSet = "notebooks.kubeflow.org/http-headers-request-set"
 
@@ -57,6 +55,7 @@ type SparkHistoryServerReconciler struct {
 //+kubebuilder:rbac:groups=kubricks.kubricks.io,resources=sparkhistoryservers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kubricks.kubricks.io,resources=sparkhistoryservers/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kubricks.kubricks.io,resources=sparkhistoryservers/finalizers,verbs=update
+//+kubebuilder:rbac:groups=api.core.v1,resources=deployment,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=api.core.v1,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="networking.istio.io",resources=virtualservices,verbs="*"
 //+kubebuilder:rbac:groups="networking.istio.io",resources=envoyfilters,verbs="*"
@@ -76,35 +75,31 @@ func (r *SparkHistoryServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// TODO(user): your logic here
 
 	// If any changes occur then reconcile function will be called.
-	// Get the sparkhistoryserver object on which reconcile is called
-	var sparkhistoryserver kubricksv1.SparkHistoryServer
-	if err := r.Get(ctx, req.NamespacedName, &sparkhistoryserver); err != nil {
-		log.Info("Unable to fetch Sparkhistoryserver", "Error", err)
+	// Get the sparkHistoryServer object on which reconcile is called
+	var sparkHistoryServer kubricksv1.SparkHistoryServer
+	if err := r.Get(ctx, req.NamespacedName, &sparkHistoryServer); err != nil {
+		log.Info("Unable to fetch SparkHistoryServer", "Error", err)
 
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	// Reconcile Deployment.
-	err := r.reconcileDeployment(ctx, req, &sparkhistoryserver, log)
-	if err != nil {
+	if err := r.reconcileDeployment(ctx, req, &sparkHistoryServer, log); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile Service.
-	err = r.reconcileService(ctx, req, &sparkhistoryserver, log)
-	if err != nil {
+	if err := r.reconcileService(ctx, req, &sparkHistoryServer, log); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile VirtualService.
-	err = r.reconcileVirtualService(&sparkhistoryserver, log)
-	if err != nil {
+	if err := r.reconcileVirtualService(&sparkHistoryServer, log); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile EnvoyFilter.
-	err = r.reconcileEnvoyFilter(req, &sparkhistoryserver, log)
-	if err != nil {
+	if err := r.reconcileEnvoyFilter(req, &sparkHistoryServer, log); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -118,27 +113,13 @@ func (r *SparkHistoryServerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		Complete(r)
 }
 
-func virtualServiceName(kfName string, namespace string) string {
-	return fmt.Sprintf("notebook-%s-%s", namespace, kfName)
-}
-
+// Generates VirtualService from CR SparkHistoryServer
 func generateVirtualService(instance *kubricksv1.SparkHistoryServer) (*unstructured.Unstructured, error) {
 	name := instance.Name
 	namespace := instance.Namespace
 	clusterDomain := "cluster.local"
 	prefix := fmt.Sprintf("/sparkhistory/%s", namespace)
-
-	// unpack annotations from Notebook resource
-	annotations := make(map[string]string)
-	for k, v := range instance.ObjectMeta.Annotations {
-		annotations[k] = v
-	}
-
-	rewrite := fmt.Sprintf("/")
-	// If AnnotationRewriteURI is present, use this value for "rewrite"
-	if _, ok := annotations[AnnotationRewriteURI]; ok && len(annotations[AnnotationRewriteURI]) > 0 {
-		rewrite = annotations[AnnotationRewriteURI]
-	}
+	rewrite := "/"
 
 	if clusterDomainFromEnv, ok := os.LookupEnv("CLUSTER_DOMAIN"); ok {
 		clusterDomain = clusterDomainFromEnv
@@ -148,37 +129,24 @@ func generateVirtualService(instance *kubricksv1.SparkHistoryServer) (*unstructu
 	vsvc := &unstructured.Unstructured{}
 	vsvc.SetAPIVersion("networking.istio.io/v1alpha3")
 	vsvc.SetKind("VirtualService")
-	vsvc.SetName(virtualServiceName(name, namespace))
+	vsvc.SetName(name)
 	vsvc.SetNamespace(namespace)
 	if err := unstructured.SetNestedStringSlice(vsvc.Object, []string{"*"}, "spec", "hosts"); err != nil {
 		return nil, fmt.Errorf("Set .spec.hosts error: %v", err)
 	}
 
+	// The gateway section of the istio VirtualService spec
 	istioGateway := os.Getenv("ISTIO_GATEWAY")
 	if len(istioGateway) == 0 {
 		istioGateway = "kubeflow/kubeflow-gateway"
 	}
+	// Add gateway section to istio VirtualService spec
 	if err := unstructured.SetNestedStringSlice(vsvc.Object, []string{istioGateway},
 		"spec", "gateways"); err != nil {
 		return nil, fmt.Errorf("Set .spec.gateways error: %v", err)
 	}
 
-	headersRequestSet := make(map[string]string)
-	// If AnnotationHeadersRequestSet is present, use its values in "headers.request.set"
-	if _, ok := annotations[AnnotationHeadersRequestSet]; ok && len(annotations[AnnotationHeadersRequestSet]) > 0 {
-		requestHeadersBytes := []byte(annotations[AnnotationHeadersRequestSet])
-		if err := json.Unmarshal(requestHeadersBytes, &headersRequestSet); err != nil {
-			// if JSON decoding fails, set an empty map
-			headersRequestSet = make(map[string]string)
-		}
-	}
-	// cast from map[string]string, as SetNestedSlice needs map[string]interface{}
-	headersRequestSetInterface := make(map[string]interface{})
-	for key, element := range headersRequestSet {
-		headersRequestSetInterface[key] = element
-	}
-
-	// the http section of the istio VirtualService spec
+	// The http section of the istio VirtualService spec
 	http := []interface{}{
 		map[string]interface{}{
 			"match": []interface{}{
@@ -208,57 +176,48 @@ func generateVirtualService(instance *kubricksv1.SparkHistoryServer) (*unstructu
 			},
 		},
 	}
-
-	// add http section to istio VirtualService spec
+	// Add http section to istio VirtualService spec
 	if err := unstructured.SetNestedSlice(vsvc.Object, http, "spec", "http"); err != nil {
 		return nil, fmt.Errorf("Set .spec.http error: %v", err)
 	}
 
 	return vsvc, nil
-
 }
 
 func (r *SparkHistoryServerReconciler) reconcileVirtualService(instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
-	//log := r.Log.WithValues("notebook", instance.Namespace)
+	log.Info("Updating VirtualService")
 	virtualService, err := generateVirtualService(instance)
 	if err := ctrl.SetControllerReference(instance, virtualService, r.Scheme); err != nil {
 		return err
 	}
-	// Check if the virtual service already exists.
+	// Check if the VirtualService already exists.
 	foundVirtual := &unstructured.Unstructured{}
 	justCreated := false
 	foundVirtual.SetAPIVersion("networking.istio.io/v1alpha3")
 	foundVirtual.SetKind("VirtualService")
-	err = r.Get(context.TODO(), types.NamespacedName{Name: virtualServiceName(instance.Name,
-		instance.Namespace), Namespace: instance.Namespace}, foundVirtual)
+	err = r.Get(context.TODO(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, foundVirtual)
 	if err != nil && apierrs.IsNotFound(err) {
-		log.Info("Creating virtual service", "namespace", instance.Namespace, "name",
-			virtualServiceName(instance.Name, instance.Namespace))
-		err = r.Create(context.TODO(), virtualService)
 		justCreated = true
-		if err != nil {
+		if err = r.Create(context.TODO(), virtualService); err != nil {
 			return err
 		}
+		log.Info("VirtualService created")
 	} else if err != nil {
+		log.Info("Failed to get VirtualService")
 		return err
 	}
 
 	if !justCreated && reconcilehelper.CopyVirtualService(virtualService, foundVirtual) {
-		log.Info("Updating virtual service", "namespace", instance.Namespace, "name",
-			virtualServiceName(instance.Name, instance.Namespace))
-		err = r.Update(context.TODO(), foundVirtual)
-		if err != nil {
+		if err = r.Update(context.TODO(), foundVirtual); err != nil {
 			return err
 		}
+		log.Info("EnvoyFilter updated")
 	}
 
 	return nil
 }
 
-func envoyFilterName(kfName string, namespace string) string {
-	return fmt.Sprintf("notebook-%s-%s", namespace, kfName)
-}
-
+// Generates EnvoyFilter from CR SparkHistoryServer
 func generateEnvoyFilter(req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) (*unstructured.Unstructured, error) {
 	name := instance.Name
 	namespace := instance.Namespace
@@ -266,25 +225,26 @@ func generateEnvoyFilter(req ctrl.Request, instance *kubricksv1.SparkHistoryServ
 	vsvc := &unstructured.Unstructured{}
 	vsvc.SetAPIVersion("networking.istio.io/v1alpha3")
 	vsvc.SetKind("EnvoyFilter")
-	vsvc.SetName(envoyFilterName(name, namespace))
+	vsvc.SetName(name)
 	vsvc.SetNamespace(namespace)
 	if err := unstructured.SetNestedStringSlice(vsvc.Object, []string{"*"}, "spec", "hosts"); err != nil {
 		return nil, fmt.Errorf("Set .spec.hosts error: %v", err)
 	}
 
+	// The workloadSelector section of the istio EnvoyFilter spec
 	workloadSelector := map[string]interface{}{
 		"labels": map[string]interface{}{
 			"app.kubernetes.io/name":     req.Name,
 			"app.kubernetes.io/instance": req.Namespace,
 		},
 	}
-	// add workloadSelector section to istio EnvoyFilter spec
+	// Add workloadSelector section to istio EnvoyFilter spec
 	if err := unstructured.SetNestedField(vsvc.Object, workloadSelector, "spec", "workloadSelector"); err != nil {
 		return nil, fmt.Errorf("Set .spec.http error: %v", err)
 	}
 
+	// The configPatches section of the istio EnvoyFilter spec
 	var inlineCode = "function envoy_on_response(response_handle, context)\n    response_handle:headers():replace(\"location\", \"\");\nend\n"
-
 	configPatches := []interface{}{
 		map[string]interface{}{
 			"applyTo": "HTTP_FILTER",
@@ -313,7 +273,7 @@ func generateEnvoyFilter(req ctrl.Request, instance *kubricksv1.SparkHistoryServ
 			},
 		},
 	}
-
+	// Add configPatches section to istio EnvoyFilter spec
 	if err := unstructured.SetNestedSlice(vsvc.Object, configPatches, "spec", "configPatches"); err != nil {
 		return nil, fmt.Errorf("Set .spec.http error: %v", err)
 	}
@@ -323,37 +283,33 @@ func generateEnvoyFilter(req ctrl.Request, instance *kubricksv1.SparkHistoryServ
 }
 
 func (r *SparkHistoryServerReconciler) reconcileEnvoyFilter(req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
-	//log := r.Log.WithValues("notebook", instance.Namespace)
+	log.Info("Updating EnvoyFilter")
 	envoyFilter, err := generateEnvoyFilter(req, instance, log)
 	if err := ctrl.SetControllerReference(instance, envoyFilter, r.Scheme); err != nil {
 		return err
 	}
-	// Check if the envoy filter already exists.
+	// Check if the EnvoyFilter already exists.
 	foundEnvoy := &unstructured.Unstructured{}
 	justCreated := false
 	foundEnvoy.SetAPIVersion("networking.istio.io/v1alpha3")
 	foundEnvoy.SetKind("EnvoyFilter")
-	err = r.Get(context.TODO(), types.NamespacedName{Name: envoyFilterName(instance.Name,
-		instance.Namespace), Namespace: instance.Namespace}, foundEnvoy)
+	err = r.Get(context.TODO(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, foundEnvoy)
 	if err != nil && apierrs.IsNotFound(err) {
-		log.Info("Creating envoy filter", "namespace", instance.Namespace, "name",
-			envoyFilterName(instance.Name, instance.Namespace))
-		err = r.Create(context.TODO(), envoyFilter)
 		justCreated = true
-		if err != nil {
+		if err = r.Create(context.TODO(), envoyFilter); err != nil {
 			return err
 		}
+		log.Info("EnvoyFilter created")
 	} else if err != nil {
+		log.Info("Failed to get EnvoyFilter")
 		return err
 	}
 
 	if !justCreated && CopyEnvoyFilter(envoyFilter, foundEnvoy) {
-		log.Info("Updating envoy filter", "namespace", instance.Namespace, "name",
-			envoyFilterName(instance.Name, instance.Namespace))
-		err = r.Update(context.TODO(), foundEnvoy)
-		if err != nil {
+		if err = r.Update(context.TODO(), foundEnvoy); err != nil {
 			return err
 		}
+		log.Info("EnvoyFilter updated")
 	}
 
 	return nil
@@ -400,8 +356,8 @@ func generateService(instance *kubricksv1.SparkHistoryServer) (*corev1.Service, 
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "http",
-					Port:       18080,
-					TargetPort: intstr.FromString("historyport"),
+					Port:       DefaultServingPort,
+					TargetPort: intstr.FromString(DefaultServingPortName),
 					Protocol:   "TCP",
 				},
 			},
@@ -424,7 +380,7 @@ func (r *SparkHistoryServerReconciler) reconcileService(ctx context.Context, req
 
 	var foundService corev1.Service
 	if err = r.Get(ctx, req.NamespacedName, &foundService); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrs.IsNotFound(err) {
 			if err = r.Create(ctx, service); err != nil {
 				return err
 			}
@@ -453,8 +409,6 @@ func generateDeployment(instance *kubricksv1.SparkHistoryServer) (*appsv1.Deploy
 	historyCommand += "  -Dspark.hadoop.fs.s3a.aws.credentials.provider=com.amazonaws.auth.WebIdentityTokenCredentialsProvider \\\n"
 	historyCommand += "  -Dspark.history.fs.logDirectory=s3a://" + instance.Spec.Bucket + "/pipelines/" + instance.Namespace + "/history \\\n"
 	historyCommand += "  -Dspark.ui.proxyBase=/sparkhistory/" + instance.Namespace + " \\\n"
-	//	historyCommand += "  -Dspark.ui.reverseProxy=true \\\n"
-	//	historyCommand += "  -Dspark.ui.reverseProxyUrl=https://kubeflow.at.onplural.sh/sparkhistory/" + req.Namespace + " \\\n"
 	historyCommand += "  -Dspark.history.fs.cleaner.enabled=" + strconv.FormatBool(instance.Spec.Cleaner.Enabled) + " \\\n"
 	historyCommand += "  -Dspark.history.fs.cleaner.maxAge=" + instance.Spec.Cleaner.MaxAge + "\";\n"
 	historyCommand += "/opt/spark/bin/spark-class org.apache.spark.deploy.history.HistoryServer;\n"
@@ -498,8 +452,8 @@ func generateDeployment(instance *kubricksv1.SparkHistoryServer) (*appsv1.Deploy
 							Image: instance.Spec.Image,
 							Ports: []corev1.ContainerPort{
 								{
-									ContainerPort: 18080,
-									Name:          "historyport",
+									ContainerPort: DefaultServingPort,
+									Name:          DefaultServingPortName,
 								},
 							},
 							ImagePullPolicy: instance.Spec.ImagePullPolicy,
@@ -528,7 +482,7 @@ func (r *SparkHistoryServerReconciler) reconcileDeployment(ctx context.Context, 
 
 	var foundDeployment appsv1.Deployment
 	if err = r.Get(ctx, req.NamespacedName, &foundDeployment); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrs.IsNotFound(err) {
 			if err = r.Create(ctx, deployment); err != nil {
 				return err
 			}
