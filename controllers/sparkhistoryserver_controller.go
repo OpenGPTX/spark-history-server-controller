@@ -18,9 +18,11 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
+	"regexp"
 	"strconv"
 
 	"github.com/go-logr/logr"
@@ -402,18 +404,18 @@ func (r *SparkHistoryServerReconciler) reconcileService(ctx context.Context, req
 }
 
 // Generates Deployment from CR SparkHistoryServer
-func generateDeployment(instance *kubricksv1.SparkHistoryServer) (*appsv1.Deployment, error) {
+func generateDeployment(instance *kubricksv1.SparkHistoryServer, bucketName string) (*appsv1.Deployment, error) {
 
+	var sparkhistoryserverDeployment *appsv1.Deployment
 	var historyCommand = "export SPARK_HISTORY_OPTS=\"$SPARK_HISTORY_OPTS \\\n"
 	historyCommand += "  -Dspark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \\\n"
 	historyCommand += "  -Dspark.hadoop.fs.s3a.aws.credentials.provider=com.amazonaws.auth.WebIdentityTokenCredentialsProvider \\\n"
-	historyCommand += "  -Dspark.history.fs.logDirectory=s3a://" + instance.Spec.Bucket + "/pipelines/" + instance.Namespace + "/history \\\n"
+	historyCommand += "  -Dspark.history.fs.logDirectory=s3a://" + bucketName + "/pipelines/" + instance.Namespace + "/history \\\n"
 	historyCommand += "  -Dspark.ui.proxyBase=/sparkhistory/" + instance.Namespace + " \\\n"
 	historyCommand += "  -Dspark.history.fs.cleaner.enabled=" + strconv.FormatBool(instance.Spec.Cleaner.Enabled) + " \\\n"
 	historyCommand += "  -Dspark.history.fs.cleaner.maxAge=" + instance.Spec.Cleaner.MaxAge + "\";\n"
 	historyCommand += "/opt/spark/bin/spark-class org.apache.spark.deploy.history.HistoryServer;\n"
 
-	var sparkhistoryserverDeployment *appsv1.Deployment
 	sparkhistoryserverDeployment = &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
@@ -475,7 +477,29 @@ func generateDeployment(instance *kubricksv1.SparkHistoryServer) (*appsv1.Deploy
 
 func (r *SparkHistoryServerReconciler) reconcileDeployment(ctx context.Context, req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
 	log.Info("Updating Deployment")
-	deployment, err := generateDeployment(instance)
+
+	// Get Bucket name from K8s cluster if it is not defined in the CRD
+	var bucketName = ""
+	if instance.Spec.Bucket != "" {
+		bucketName = instance.Spec.Bucket
+	} else {
+		var configmap corev1.ConfigMap
+		var reqConfigmap = req
+		reqConfigmap.NamespacedName.Name = "artifact-repositories"
+		if err := r.Get(ctx, reqConfigmap.NamespacedName, &configmap); err != nil {
+			return err
+		}
+		var configmapData = configmap.Data["default-v1"]
+		regex := regexp.MustCompile(`bucket: (.*)\n\s\s`)
+		var regexResult = regex.FindAllStringSubmatch(configmapData, -1)
+		if len(regexResult) > 0 && len(regexResult[0]) > 1 {
+			bucketName = regexResult[0][1]
+		} else {
+			return errors.New("No bucket name found. Cannot proceed!")
+		}
+	}
+
+	deployment, err := generateDeployment(instance, bucketName)
 	if err := ctrl.SetControllerReference(instance, deployment, r.Scheme); err != nil {
 		return err
 	}
