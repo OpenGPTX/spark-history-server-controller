@@ -13,4 +13,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: public.ecr.aws/atcommons/sparkhistoryservercontroller
-  newTag: dev
+  newTag: 0.1.0

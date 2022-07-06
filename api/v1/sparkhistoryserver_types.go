@@ -34,7 +34,7 @@ type SparkHistoryServerSpec struct {
 
 	// Container image name.
 	// More info: https://kubernetes.io/docs/concepts/containers/images
-	Image string `json:"image,omitempty"`
+	Image string `json:"image"`
 
 	// Image pull policy.
 	// One of Always, Never, IfNotPresent.
@@ -90,7 +90,7 @@ type SparkHistoryServer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   SparkHistoryServerSpec   `json:"spec,omitempty"`
+	Spec   SparkHistoryServerSpec   `json:"spec"`
 	Status SparkHistoryServerStatus `json:"status,omitempty"`
 }
 

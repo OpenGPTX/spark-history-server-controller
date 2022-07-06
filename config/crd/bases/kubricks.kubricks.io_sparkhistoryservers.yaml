@@ -111,10 +111,14 @@ spec:
                 description: 'ServiceAccountName is the name of the ServiceAccount
                   to use to run this pod. More info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/'
                 type: string
+            required:
+            - image
             type: object
           status:
             description: SparkHistoryServerStatus defines the observed state of SparkHistoryServer
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

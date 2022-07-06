@@ -99,3 +99,13 @@ make uninstall
 
 make undeploy
 ```
+
+
+```
+make docker-build docker-push IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
+make deploy IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
+```
+
+
+
+
