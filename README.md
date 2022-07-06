@@ -2,7 +2,11 @@
 
 ## Important files
 
+- controllers/sparkhistoryserver_controller.go
+- api/v1/sparkhistoryserver_types.go
+- config/rbac/sparkhistoryserver_editor_role.yaml (needed to be added in config/rbac/kustomization.yaml)
 
+## Development process
 ```
 make docker-build docker-push IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
 make deploy IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
@@ -62,9 +66,9 @@ metadata:
   namespace: default
 ```
 
-More info about how to get started with kubebuilder can be found [here](https://github.com/kubernetes-sigs/kubebuilder#getting-started) and [here](https://book.kubebuilder.io/quick-start.html)
+More info about how to get started with kubebuilder can be found [here](https://github.com/kubernetes-sigs/kubebuilder#getting-started) and [here](https://book.kubebuilder.io/quick-start.html).
 
-[Create a Project](https://book.kubebuilder.io/quick-start.html#create-a-project)
+[Create a Project:](https://book.kubebuilder.io/quick-start.html#create-a-project)
 ```
 kubebuilder init --domain kubricks.io --repo kubricks.io/sparkhistoryserver
 ```
@@ -73,7 +77,7 @@ What matters?
 - `--repo kubricks.io/sparkhistoryserver` = `module <here>` in `go.mod`
 
 
-[Create an API](https://book.kubebuilder.io/quick-start.html#create-an-api)
+[Create an API:](https://book.kubebuilder.io/quick-start.html#create-an-api)
 ```
 kubebuilder create api --group kubricks --version v1 --kind SparkHistoryServer
 
@@ -85,15 +89,15 @@ What matters?
 - `--kind SparkHistoryServer` = `kind: <here>`
 
 
-[Test It Out](https://book.kubebuilder.io/quick-start.html#test-it-out)
+[Test It Out:](https://book.kubebuilder.io/quick-start.html#test-it-out)
 
 ```
-make install #installs CRD(s)
+make install # Installs CRD(s)
 
-make run #runs the controller locally in the terminal
+make run # Runs the controller locally in the terminal
 ```
 
-[Install Instances of Custom Resources](https://book.kubebuilder.io/quick-start.html#install-instances-of-custom-resources)
+[Install Instances of Custom Resources:](https://book.kubebuilder.io/quick-start.html#install-instances-of-custom-resources)
 
 ```
 # Deploy a CR via:
@@ -102,7 +106,7 @@ kubectl apply -f config/samples/
 kubectl get sparkhistoryserver -A
 ```
 
-[Run It On the Cluster](https://book.kubebuilder.io/quick-start.html#run-it-on-the-cluster)
+[Run It On the Cluster:](https://book.kubebuilder.io/quick-start.html#run-it-on-the-cluster)
 
 ```
 make docker-build docker-push IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
@@ -111,7 +115,7 @@ make deploy IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
 ```
 
 [Uninstall CRDs](https://book.kubebuilder.io/quick-start.html#uninstall-crds)
- and [Undeploy controller](https://book.kubebuilder.io/quick-start.html#undeploy-controller)
+ and [Undeploy controller:](https://book.kubebuilder.io/quick-start.html#undeploy-controller)
 
 ```
 make uninstall
