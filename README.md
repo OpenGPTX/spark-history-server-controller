@@ -1,13 +1,19 @@
-# spark-history-server-controller
+# Spark-history-server-controller
 
-## kube-builder-tutorial
+## Important files
+
+## Testing
+
+
+
+## Kube-builder tutorial
 
 ### Prerequisites
 
 - Minikube can be a good fit to develop locally (no worries to destroy the production system but if it need to many dependencies, it is very time consuming to integrate it into minikube):
- - How to install minikube, can be found here: https://minikube.sigs.k8s.io/docs/start/
- - Each day, you just start minikube: `minikube start` (this also configures kubeconfig automatically)
- - In case you need the kubeconfig again without restarting minikube: `minikube update-context`
+  - How to install minikube, can be found here: https://minikube.sigs.k8s.io/docs/start/
+  - Each day, you just start minikube: `minikube start` (this also configures kubeconfig automatically)
+  - In case you need the kubeconfig again without restarting minikube: `minikube update-context`
 - Install kubebuilder (latest was 3.4.1 at that time): https://github.com/kubernetes-sigs/kubebuilder/releases
 ```
 wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v3.4.1/kubebuilder_linux_amd64
