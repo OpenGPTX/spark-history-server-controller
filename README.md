@@ -10,11 +10,11 @@
 
 ### Prerequisites
 
-- Minikube can be a good fit to develop locally (no worries to destroy the production system but if it need to many dependencies, it is very time consuming to integrate it into minikube):
-  - How to install minikube, can be found here: https://minikube.sigs.k8s.io/docs/start/
-  - Each day, you just start minikube: `minikube start` (this also configures kubeconfig automatically)
-  - In case you need the kubeconfig again without restarting minikube: `minikube update-context`
-- Install kubebuilder (latest was 3.4.1 at that time): https://github.com/kubernetes-sigs/kubebuilder/releases
+- Minikube can be a good fit (other solutions are `kind` or `k3s`) to develop locally (no worries to destroy the production system but if it need too many dependencies, it is very time consuming to integrate it into Minikube):
+  - How to install Minikube, can be found [here](https://minikube.sigs.k8s.io/docs/start/).
+  - Each day, you just start Minikube: `minikube start` (this also configures kubeconfig automatically)
+  - In case you need the kubeconfig again without restarting Minikube: `minikube update-context`
+- Install [kubebuilder](https://github.com/kubernetes-sigs/kubebuilder/releases) (latest was 3.4.1 at that time):
 ```
 wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v3.4.1/kubebuilder_linux_amd64
 
@@ -23,21 +23,22 @@ sudo mv kubebuilder_linux_amd64 /usr/local/bin/kubebuilder
 
 kubebuilder version
 ```
-- Install Golang (I decided to go with v1.17+): https://github.com/golang/go/releases
+- Install [Golang](https://github.com/golang/go/releases) (I decided to go for v1.17+): 
 ```
 wget https://go.dev/dl/go1.17.11.linux-amd64.tar.gz
 sudo tar -C /usr/local -xzf go1.17.11.linux-amd64.tar.gz
 export PATH=$PATH:/usr/local/go/bin
 echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc
+
 go version
 ```
 
 
-### Some important doc for Golang@K8s
+### Some important documentation for Golang@K8s
 
-Especially when writing the CRD or creating K8s objects, the official documentation help a lot in terms of (data) types, structs and so on.
+Especially when writing the CRD or creating K8s objects, the official documentation helps a lot in terms of (data) types, structs and so on.
 
-- Here is the spec of a `Deployment`: https://pkg.go.dev/k8s.io/api/apps/v1#Deployment
+- Here is the spec of a [`Deployment`](https://pkg.go.dev/k8s.io/api/apps/v1#Deployment)
 - If you go deeper and want to take a look into the `ObjectMeta` (a.k.a `metadata`), look here: https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#ObjectMeta
 - The so called `ServicePort` (a.k.a `port` in a Service) can be found here: https://pkg.go.dev/k8s.io/api/core/v1#ServicePort
 
