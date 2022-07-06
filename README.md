@@ -2,6 +2,13 @@
 
 ## Important files
 
+
+```
+make docker-build docker-push IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
+make deploy IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
+```
+
+
 ## Testing
 
 
@@ -11,7 +18,7 @@
 ### Prerequisites
 
 - Minikube can be a good fit (other solutions are `kind` or `k3s`) to develop locally (no worries to destroy the production system but if it need too many dependencies, it is very time consuming to integrate it into Minikube):
-  - How to install Minikube, can be found [here](https://minikube.sigs.k8s.io/docs/start/).
+  - How to install Minikube, can be found [here](https://minikube.sigs.k8s.io/docs/start/)
   - Each day, you just start Minikube: `minikube start` (this also configures kubeconfig automatically)
   - In case you need the kubeconfig again without restarting Minikube: `minikube update-context`
 - Install [kubebuilder](https://github.com/kubernetes-sigs/kubebuilder/releases) (latest was 3.4.1 at that time):
@@ -39,8 +46,8 @@ go version
 Especially when writing the CRD or creating K8s objects, the official documentation helps a lot in terms of (data) types, structs and so on.
 
 - Here is the spec of a [`Deployment`](https://pkg.go.dev/k8s.io/api/apps/v1#Deployment)
-- If you go deeper and want to take a look into the `ObjectMeta` (a.k.a `metadata`), look here: https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#ObjectMeta
-- The so called `ServicePort` (a.k.a `port` in a Service) can be found here: https://pkg.go.dev/k8s.io/api/core/v1#ServicePort
+- If you go deeper and want to take a look into the `ObjectMeta` (a.k.a `metadata`), look [here](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#ObjectMeta)
+- The so called `ServicePort` (a.k.a `port` in a Service) can be found [here](https://pkg.go.dev/k8s.io/api/core/v1#ServicePort)
 
 Click around, google specific K8s resources and you will find the according doc that will help you.
 
@@ -55,9 +62,9 @@ metadata:
   namespace: default
 ```
 
-More info about how to get started with kubebuilder can be found here: https://github.com/kubernetes-sigs/kubebuilder#getting-started and here: https://book.kubebuilder.io/quick-start.html
+More info about how to get started with kubebuilder can be found [here](https://github.com/kubernetes-sigs/kubebuilder#getting-started) and [here](https://book.kubebuilder.io/quick-start.html)
 
-https://book.kubebuilder.io/quick-start.html#create-a-project
+[Create a Project](https://book.kubebuilder.io/quick-start.html#create-a-project)
 ```
 kubebuilder init --domain kubricks.io --repo kubricks.io/sparkhistoryserver
 ```
@@ -66,26 +73,28 @@ What matters?
 - `--repo kubricks.io/sparkhistoryserver` = `module <here>` in `go.mod`
 
 
-https://book.kubebuilder.io/quick-start.html#create-an-api
+[Create an API](https://book.kubebuilder.io/quick-start.html#create-an-api)
 ```
 kubebuilder create api --group kubricks --version v1 --kind SparkHistoryServer
 
 make manifests
 ```
 What matters?
-- `--group kubricks` = `apiVersion: kubricks.kubricks.io/v1`
+- `--group kubricks` = `apiVersion: <here>.kubricks.io/v1`
 - `--version v1` = `apiVersion: <here>.kubricks.io/<here>`
 - `--kind SparkHistoryServer` = `kind: <here>`
 
 
-https://book.kubebuilder.io/quick-start.html#test-it-out
+[Test It Out](https://book.kubebuilder.io/quick-start.html#test-it-out)
+
 ```
 make install #installs CRD(s)
 
 make run #runs the controller locally in the terminal
 ```
 
-https://book.kubebuilder.io/quick-start.html#install-instances-of-custom-resources
+[Install Instances of Custom Resources](https://book.kubebuilder.io/quick-start.html#install-instances-of-custom-resources)
+
 ```
 # Deploy a CR via:
 kubectl apply -f config/samples/
@@ -93,25 +102,23 @@ kubectl apply -f config/samples/
 kubectl get sparkhistoryserver -A
 ```
 
-https://book.kubebuilder.io/quick-start.html#run-it-on-the-cluster
+[Run It On the Cluster](https://book.kubebuilder.io/quick-start.html#run-it-on-the-cluster)
+
 ```
 make docker-build docker-push IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
 
 make deploy IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
 ```
 
-https://book.kubebuilder.io/quick-start.html#uninstall-crds and https://book.kubebuilder.io/quick-start.html#undeploy-controller
+[Uninstall CRDs](https://book.kubebuilder.io/quick-start.html#uninstall-crds)
+ and [Undeploy controller](https://book.kubebuilder.io/quick-start.html#undeploy-controller)
+
 ```
 make uninstall
 
 make undeploy
 ```
 
-
-```
-make docker-build docker-push IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
-make deploy IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
-```
 
 
 
