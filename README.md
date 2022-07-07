@@ -1,10 +1,19 @@
 # Spark-history-server-controller
 
+A lot of background information can be found [here](https://github.com/KubeSoup/spark-history-server). This  spark-history-server-controller is just the automation from it.
 ## Important files
 
-- controllers/sparkhistoryserver_controller.go
-- api/v1/sparkhistoryserver_types.go
-- config/rbac/sparkhistoryserver_editor_role.yaml (needed to be added in config/rbac/kustomization.yaml)
+- `controllers/sparkhistoryserver_controller.go` this is the most important file as it does all the magic and reconciles the following resources:
+  - `Deployment`
+  - `Service`
+  - `VirtualService`
+  - `EnvoyFilter`
+- `api/v1/sparkhistoryserver_types.go` this represents the CRD/CR
+- `config/rbac/sparkhistoryserver_editor_role.yaml` needed to be added in `config/rbac/kustomization.yaml` including adding the following that the ServiceAccounts `default-editor` have permissions to deal with the CR `SparkHistoryServer`:
+```
+  labels:
+    rbac.authorization.kubeflow.org/aggregate-to-kubeflow-edit: "true"
+```
 
 ## Development process
 ```
@@ -22,7 +31,7 @@ make deploy IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
 ### Prerequisites
 
 - Minikube can be a good fit (other solutions are `kind` or `k3s`) to develop locally (no worries to destroy the production system but if it need too many dependencies, it is very time consuming to integrate it into Minikube):
-  - How to install Minikube, can be found [here](https://minikube.sigs.k8s.io/docs/start/)
+  - How to install Minikube, can be found 
   - Each day, you just start Minikube: `minikube start` (this also configures kubeconfig automatically)
   - In case you need the kubeconfig again without restarting Minikube: `minikube update-context`
 - Install [kubebuilder](https://github.com/kubernetes-sigs/kubebuilder/releases) (latest was 3.4.1 at that time):
@@ -123,7 +132,10 @@ make uninstall
 make undeploy
 ```
 
+### Understanding some important mechanisms
 
-
+- RBAC
+- CRD defaults/omitempty
+- r.get r.create r.uodate
 
 
