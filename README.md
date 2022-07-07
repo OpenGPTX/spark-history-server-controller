@@ -8,7 +8,7 @@ A lot of background information can be found [here](https://github.com/KubeSoup/
   - `Service`
   - `VirtualService`
   - `EnvoyFilter`
-- `api/v1/sparkhistoryserver_types.go` this represents the CRD/CR
+- `api/v1/sparkhistoryserver_types.go` this represents the CRD
 - `config/rbac/sparkhistoryserver_editor_role.yaml` needed to be added in `config/rbac/kustomization.yaml` including adding the following that the ServiceAccounts `default-editor` have permissions to deal with the CR `SparkHistoryServer`:
 ```
   labels:
@@ -16,6 +16,16 @@ A lot of background information can be found [here](https://github.com/KubeSoup/
 ```
 
 ## Development process
+
+In case you change the CRD (`api/v1/sparkhistoryserver_types.go`), you need to generate those:
+```
+make manifest
+
+# If you want to deploy only CRD's (but make deploy does the same too):
+make install
+```
+
+In order to build and deploy:
 ```
 make docker-build docker-push IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
 make deploy IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
@@ -24,7 +34,63 @@ make deploy IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
 
 ## Testing
 
+1. Creating a SparkHistoryServer
+```
+cat <<EOF | kubectl apply -f -
+apiVersion: kubricks.kubricks.io/v1
+kind: SparkHistoryServer
+metadata:
+  name: sparkhistoryserver
+  namespace: <your_namespace>
+spec:
+  image: public.ecr.aws/atcommons/sparkhistoryserver:14469 #It is Spark version 3.2.1
+EOF
+```
 
+2. Look that the default values are set correctly `kubectl get SparkHistoryServer sparkhistoryserver -o yaml`:
+```
+apiVersion: kubricks.kubricks.io/v1
+kind: SparkHistoryServer
+metadata:
+  name: sparkhistoryserver
+  namespace: <your_namespace>
+spec:
+  cleaner:
+    enabled: true
+    maxAge: 30d
+  image: public.ecr.aws/atcommons/sparkhistoryserver:14469
+  imagePullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 512Mi
+  serviceAccountName: default-editor
+```
+
+3. Ensure everything is set up correctly and you can access it with the according url: `https://kubeflow.at.onplural.sh/sparkhistory/tim-krause`
+```
+kubectl get deployment sparkhistoryserver -o yaml -n <your_namespace>
+kubectl get service sparkhistoryserver -o yaml -n <your_namespace>
+kubectl get virtualservice sparkhistoryserver -o yaml -n <your_namespace>
+kubectl get envoyfilter sparkhistoryserver -o yaml -n <your_namespace>
+```
+
+4. You can also adjust the `SparkHistoryServer` and the controller reconciles it accordingly.
+
+5. Ensure everything gets cleaned up after deleting the CR: `kubectl delete SparkHistoryServer sparkhistoryserver`.
+
+## Build Dockerimage with new official version
+
+Adjust the version!
+```
+make docker-build docker-push IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:0.1.0
+```
+
+Update our [rollout doc](https://github.com/KubeSoup/internal-docs/blob/main/plural/cluster-setup.md#install-sparkhistoryserver) (the version) and do the rollout like it is described there!
 
 ## Kube-builder tutorial
 
