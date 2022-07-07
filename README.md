@@ -205,7 +205,7 @@ It is important to grant according permissions for what the controller reconcile
 ```
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 ```
-To make the an affect on your change, do `make deploy`. You will see that it added the according permissions in `config/rbac/role.yaml`.
+To make an affect on your change, do `make deploy`. You will see that it added the according permissions in `config/rbac/role.yaml`.
 #### CRD 
 
 - defaults: for setting defaults in the CR if the user does not specifies it (makes it convenient for the users), just add the according "comments" in `api/v1/sparkhistoryserver_types.go`:
