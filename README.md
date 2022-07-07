@@ -21,7 +21,7 @@ In case you change the CRD (`api/v1/sparkhistoryserver_types.go`), you need to g
 ```
 make manifest
 
-# If you want to deploy only CRD's (but make deploy does the same too):
+# If you want to deploy only CRD's (but "make deploy" does the same too):
 make install
 ```
 
@@ -34,7 +34,7 @@ make deploy IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
 
 ## Testing
 
-1. Creating a SparkHistoryServer
+1. Creating a SparkHistoryServer:
 ```
 cat <<EOF | kubectl apply -f -
 apiVersion: kubricks.kubricks.io/v1
@@ -81,7 +81,7 @@ kubectl get envoyfilter sparkhistoryserver -o yaml -n <your_namespace>
 
 4. You can also adjust the `SparkHistoryServer` and the controller reconciles it accordingly.
 
-5. Ensure everything gets cleaned up after deleting the CR: `kubectl delete SparkHistoryServer sparkhistoryserver`.
+5. Ensure everything gets cleaned up after deleting the CR: `kubectl delete SparkHistoryServer sparkhistoryserver`
 
 ## Build Dockerimage with new official version
 
@@ -200,8 +200,13 @@ make undeploy
 
 ### Understanding some important mechanisms
 
-- RBAC
+- RBAC 
+It is important to grant according permissions for what the controller reconciles! In `controllers/sparkhistoryserver_controller.go` e.g. add for example permission for `deployments` (the `//` are important and do magic behind):
+```
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+```
+To make the an affect on your change, do `make deploy`. You will see that it added the according permissions in `config/rbac/role.yaml`.
 - CRD defaults/omitempty
-- r.get r.create r.uodate
+- r.get r.create r.update
 
 
