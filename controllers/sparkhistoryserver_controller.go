@@ -26,11 +26,11 @@ import (
 	"strconv"
 
 	"github.com/go-logr/logr"
-	reconcilehelper "github.com/kubeflow/kubeflow/components/common/reconcilehelper"
+	istioNetworking "istio.io/api/networking/v1beta1"
+	istioNetworkingClient "istio.io/client-go/pkg/apis/networking/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -99,7 +99,7 @@ func (r *SparkHistoryServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// Reconcile VirtualService.
-	if err := r.reconcileVirtualService(&sparkHistoryServer, log); err != nil {
+	if err := r.reconcileVirtualService(ctx, req, &sparkHistoryServer, log); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -116,110 +116,6 @@ func (r *SparkHistoryServerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kubricksv1.SparkHistoryServer{}).
 		Complete(r)
-}
-
-// Generates VirtualService from CR SparkHistoryServer
-func generateVirtualService(instance *kubricksv1.SparkHistoryServer) (*unstructured.Unstructured, error) {
-	name := instance.Name
-	namespace := instance.Namespace
-	clusterDomain := "cluster.local"
-	prefix := fmt.Sprintf("/sparkhistory/%s", namespace)
-	rewrite := "/"
-
-	if clusterDomainFromEnv, ok := os.LookupEnv("CLUSTER_DOMAIN"); ok {
-		clusterDomain = clusterDomainFromEnv
-	}
-	service := fmt.Sprintf("%s.%s.svc.%s", name, namespace, clusterDomain)
-
-	vsvc := &unstructured.Unstructured{}
-	vsvc.SetAPIVersion("networking.istio.io/v1alpha3")
-	vsvc.SetKind("VirtualService")
-	vsvc.SetName(name)
-	vsvc.SetNamespace(namespace)
-	if err := unstructured.SetNestedStringSlice(vsvc.Object, []string{"*"}, "spec", "hosts"); err != nil {
-		return nil, fmt.Errorf("Set .spec.hosts error: %v", err)
-	}
-
-	// The gateway section of the istio VirtualService spec
-	istioGateway := os.Getenv("ISTIO_GATEWAY")
-	if len(istioGateway) == 0 {
-		istioGateway = "kubeflow/kubeflow-gateway"
-	}
-	// Add gateway section to istio VirtualService spec
-	if err := unstructured.SetNestedStringSlice(vsvc.Object, []string{istioGateway},
-		"spec", "gateways"); err != nil {
-		return nil, fmt.Errorf("Set .spec.gateways error: %v", err)
-	}
-
-	// The http section of the istio VirtualService spec
-	http := []interface{}{
-		map[string]interface{}{
-			"match": []interface{}{
-				map[string]interface{}{
-					"uri": map[string]interface{}{
-						"prefix": prefix + "/",
-					},
-				},
-				map[string]interface{}{
-					"uri": map[string]interface{}{
-						"prefix": prefix,
-					},
-				},
-			},
-			"rewrite": map[string]interface{}{
-				"uri": rewrite,
-			},
-			"route": []interface{}{
-				map[string]interface{}{
-					"destination": map[string]interface{}{
-						"host": service,
-						"port": map[string]interface{}{
-							"number": int64(DefaultServingPort),
-						},
-					},
-				},
-			},
-		},
-	}
-	// Add http section to istio VirtualService spec
-	if err := unstructured.SetNestedSlice(vsvc.Object, http, "spec", "http"); err != nil {
-		return nil, fmt.Errorf("Set .spec.http error: %v", err)
-	}
-
-	return vsvc, nil
-}
-
-func (r *SparkHistoryServerReconciler) reconcileVirtualService(instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
-	log.Info("Updating VirtualService")
-	virtualService, err := generateVirtualService(instance)
-	if err := ctrl.SetControllerReference(instance, virtualService, r.Scheme); err != nil {
-		return err
-	}
-	// Check if the VirtualService already exists.
-	foundVirtual := &unstructured.Unstructured{}
-	justCreated := false
-	foundVirtual.SetAPIVersion("networking.istio.io/v1alpha3")
-	foundVirtual.SetKind("VirtualService")
-	err = r.Get(context.TODO(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, foundVirtual)
-	if err != nil && apierrs.IsNotFound(err) {
-		justCreated = true
-		if err = r.Create(context.TODO(), virtualService); err != nil {
-			return err
-		}
-		log.Info("VirtualService created")
-	} else if err != nil {
-		log.Info("Failed to get VirtualService")
-		return err
-	}
-
-	if !justCreated && reconcilehelper.CopyVirtualService(virtualService, foundVirtual) {
-		if err = r.Update(context.TODO(), foundVirtual); err != nil {
-			return err
-		}
-		log.Info("EnvoyFilter updated")
-	}
-
-	return nil
 }
 
 // Generates EnvoyFilter from CR SparkHistoryServer
@@ -524,6 +420,109 @@ func (r *SparkHistoryServerReconciler) reconcileDeployment(ctx context.Context, 
 			return err
 		}
 		log.Info("Deployment updated")
+	}
+
+	return nil
+}
+
+// Generates VirtualService from CR SparkHistoryServer
+func generateVirtualService(instance *kubricksv1.SparkHistoryServer) (*istioNetworkingClient.VirtualService, error) {
+
+	name := instance.Name
+	namespace := instance.Namespace
+	clusterDomain := "cluster.local"
+	prefix := fmt.Sprintf("/sparkhistory/%s", namespace)
+	rewrite := "/"
+
+	if clusterDomainFromEnv, ok := os.LookupEnv("CLUSTER_DOMAIN"); ok {
+		clusterDomain = clusterDomainFromEnv
+	}
+	service := fmt.Sprintf("%s.%s.svc.%s", name, namespace, clusterDomain)
+
+	httpRoutes := []*istioNetworking.HTTPRoute{}
+
+	httpRoute := &istioNetworking.HTTPRoute{
+		Match: []*istioNetworking.HTTPMatchRequest{
+			{
+				Uri: &istioNetworking.StringMatch{
+					MatchType: &istioNetworking.StringMatch_Prefix{
+						Prefix: prefix + "/",
+					},
+				},
+			},
+			{
+				Uri: &istioNetworking.StringMatch{
+					MatchType: &istioNetworking.StringMatch_Prefix{
+						Prefix: prefix,
+					},
+				},
+			},
+		},
+		Rewrite: &istioNetworking.HTTPRewrite{
+			Uri: rewrite,
+		},
+		Route: []*istioNetworking.HTTPRouteDestination{
+			{
+				Destination: &istioNetworking.Destination{
+					Host: service,
+					Port: &istioNetworking.PortSelector{
+						Number: uint32(DefaultServingPort),
+					},
+				},
+			},
+		},
+	}
+	httpRoutes = append(httpRoutes, httpRoute)
+
+	// The gateway section of the istio VirtualService spec
+	istioGateway := os.Getenv("ISTIO_GATEWAY")
+	if len(istioGateway) == 0 {
+		istioGateway = "kubeflow/kubeflow-gateway"
+	}
+
+	virtualservice := &istioNetworkingClient.VirtualService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: istioNetworking.VirtualService{
+			Hosts: []string{
+				"*",
+			},
+			Gateways: []string{
+				istioGateway,
+			},
+			Http: httpRoutes,
+		},
+	}
+
+	return virtualservice, nil
+}
+
+func (r *SparkHistoryServerReconciler) reconcileVirtualService(ctx context.Context, req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
+	log.Info("Updating VirtualService")
+	virtualService, err := generateVirtualService(instance)
+	if err := ctrl.SetControllerReference(instance, virtualService, r.Scheme); err != nil {
+		return err
+	}
+	// Check if the VirtualService already exists.
+	var foundVirtualservice istioNetworkingClient.VirtualService
+	if err = r.Get(ctx, req.NamespacedName, &foundVirtualservice); err != nil {
+		if apierrs.IsNotFound(err) {
+			if err = r.Create(ctx, virtualService); err != nil {
+				return err
+			}
+			log.Info("VirtualService created")
+		} else {
+			log.Info("Failed to get VirtualService")
+			return err
+		}
+	} else if !reflect.DeepEqual(virtualService.Spec, foundVirtualservice.Spec) {
+		virtualService.ObjectMeta = foundVirtualservice.ObjectMeta
+		if err = r.Update(context.TODO(), virtualService); err != nil {
+			return err
+		}
+		log.Info("VirtualService updated")
 	}
 
 	return nil
