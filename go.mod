@@ -8,8 +8,9 @@ require (
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0
 	google.golang.org/protobuf v1.28.0
-	istio.io/api v0.0.0-20220418200313-202d5d40987b
+	istio.io/api v0.0.0-20220413180505-1574de06b7bd
 	istio.io/client-go v1.13.3
+	istio.io/gogo-genproto v0.0.0-20211208193508-5ab4acc9eb1e // indirect
 	k8s.io/api v0.23.5
 	k8s.io/apimachinery v0.23.5
 	k8s.io/client-go v0.23.5

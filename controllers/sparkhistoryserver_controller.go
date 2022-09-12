@@ -26,8 +26,9 @@ import (
 	"strconv"
 
 	"github.com/go-logr/logr"
-	_struct "github.com/golang/protobuf/ptypes/struct"
-	"google.golang.org/protobuf/types/known/structpb"
+	"github.com/gogo/protobuf/types"
+
+	// "google.golang.org/protobuf/proto"
 	istioNetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioNetworking "istio.io/api/networking/v1beta1"
 	istioNetworkingClientv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
@@ -153,24 +154,24 @@ func generateEnvoyFilter(instance *kubesoupv1.SparkHistoryServer) (*istioNetwork
 					// we use replace on the header so that existing values are overwritten.
 					Patch: &istioNetworkingv1alpha3.EnvoyFilter_Patch{
 						Operation: istioNetworkingv1alpha3.EnvoyFilter_Patch_INSERT_BEFORE,
-						Value: &_struct.Struct{
-							Fields: map[string]*structpb.Value{
+						Value: &types.Struct{
+							Fields: map[string]*types.Value{
 								"name": {
-									Kind: &structpb.Value_StringValue{
+									Kind: &types.Value_StringValue{
 										StringValue: "envoy.lua",
 									},
 								},
 								"typed_config": {
-									Kind: &structpb.Value_StructValue{
-										StructValue: &_struct.Struct{
-											Fields: map[string]*structpb.Value{
+									Kind: &types.Value_StructValue{
+										StructValue: &types.Struct{
+											Fields: map[string]*types.Value{
 												"@type": {
-													Kind: &structpb.Value_StringValue{
+													Kind: &types.Value_StringValue{
 														StringValue: "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua",
 													},
 												},
 												"inlineCode": {
-													Kind: &structpb.Value_StringValue{
+													Kind: &types.Value_StringValue{
 														StringValue: inlineCode,
 													},
 												},
@@ -191,6 +192,73 @@ func generateEnvoyFilter(instance *kubesoupv1.SparkHistoryServer) (*istioNetwork
 			},
 		},
 	}
+
+	// envoyFilter := &istioNetworkingClientv1alpha3.EnvoyFilter{
+
+	// 	ObjectMeta: metav1.ObjectMeta{
+	// 		Name:      name,
+	// 		Namespace: namespace,
+	// 	},
+	// 	Spec: istioNetworkingv1alpha3.EnvoyFilter{
+	// 		ConfigPatches: []*istioNetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{
+	// 			{
+	// 				ApplyTo: istioNetworkingv1alpha3.EnvoyFilter_HTTP_FILTER,
+	// 				Match: &istioNetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch{
+	// 					Context: istioNetworkingv1alpha3.EnvoyFilter_SIDECAR_INBOUND,
+	// 					ObjectTypes: &istioNetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch_Listener{
+	// 						Listener: &istioNetworkingv1alpha3.EnvoyFilter_ListenerMatch{
+	// 							FilterChain: &istioNetworkingv1alpha3.EnvoyFilter_ListenerMatch_FilterChainMatch{
+	// 								Filter: &istioNetworkingv1alpha3.EnvoyFilter_ListenerMatch_FilterMatch{
+	// 									Name: "envoy.filters.network.http_connection_manager",
+	// 									SubFilter: &istioNetworkingv1alpha3.EnvoyFilter_ListenerMatch_SubFilterMatch{
+	// 										Name: "envoy.filters.http.router",
+	// 									},
+	// 								},
+	// 							},
+	// 						},
+	// 					},
+	// 				},
+	// 				// we use replace on the header so that existing values are overwritten.
+	// 				Patch: &istioNetworkingv1alpha3.EnvoyFilter_Patch{
+	// 					Operation: istioNetworkingv1alpha3.EnvoyFilter_Patch_INSERT_BEFORE,
+	// 					Value: &_struct.Struct{
+	// 						Fields: map[string]*structpb.Value{
+	// 							"name": {
+	// 								Kind: &structpb.Value_StringValue{
+	// 									StringValue: "envoy.lua",
+	// 								},
+	// 							},
+	// 							"typed_config": {
+	// 								Kind: &structpb.Value_StructValue{
+	// 									StructValue: &_struct.Struct{
+	// 										Fields: map[string]*structpb.Value{
+	// 											"@type": {
+	// 												Kind: &structpb.Value_StringValue{
+	// 													StringValue: "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua",
+	// 												},
+	// 											},
+	// 											"inlineCode": {
+	// 												Kind: &structpb.Value_StringValue{
+	// 													StringValue: inlineCode,
+	// 												},
+	// 											},
+	// 										},
+	// 									},
+	// 								},
+	// 							},
+	// 						},
+	// 					},
+	// 				},
+	// 			},
+	// 		},
+	// 		WorkloadSelector: &istioNetworkingv1alpha3.WorkloadSelector{
+	// 			Labels: map[string]string{
+	// 				"app.kubernetes.io/name":     name,
+	// 				"app.kubernetes.io/instance": namespace,
+	// 			},
+	// 		},
+	// 	},
+	// }
 
 	return envoyFilter, nil
 }
@@ -501,6 +569,9 @@ func (r *SparkHistoryServerReconciler) reconcileVirtualService(ctx context.Conte
 			return err
 		}
 	} else if !reflect.DeepEqual(virtualService.Spec, foundVirtualservice.Spec) {
+		// if proto.Equal(virtualService.Spec, foundVirtualservice.Spec) {
+		//  print("huhu")
+		// }
 		virtualService.ObjectMeta = foundVirtualservice.ObjectMeta
 		if err = r.Update(context.TODO(), virtualService); err != nil {
 			return err
