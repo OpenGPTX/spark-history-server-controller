@@ -26,15 +26,17 @@ import (
 	"strconv"
 
 	"github.com/go-logr/logr"
+	_struct "github.com/golang/protobuf/ptypes/struct"
+	"google.golang.org/protobuf/types/known/structpb"
+	istioNetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioNetworking "istio.io/api/networking/v1beta1"
+	istioNetworkingClientv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioNetworkingClient "istio.io/client-go/pkg/apis/networking/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -60,7 +62,6 @@ type SparkHistoryServerReconciler struct {
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get
-//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="networking.istio.io",resources=virtualservices,verbs="*"
 //+kubebuilder:rbac:groups="networking.istio.io",resources=envoyfilters,verbs="*"
@@ -104,7 +105,7 @@ func (r *SparkHistoryServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// Reconcile EnvoyFilter.
-	if err := r.reconcileEnvoyFilter(req, &sparkHistoryServer, log); err != nil {
+	if err := r.reconcileEnvoyFilter(ctx, req, &sparkHistoryServer, log); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -119,126 +120,108 @@ func (r *SparkHistoryServerReconciler) SetupWithManager(mgr ctrl.Manager) error 
 }
 
 // Generates EnvoyFilter from CR SparkHistoryServer
-func generateEnvoyFilter(req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) (*unstructured.Unstructured, error) {
+func generateEnvoyFilter(instance *kubricksv1.SparkHistoryServer) (*istioNetworkingClientv1alpha3.EnvoyFilter, error) {
 	name := instance.Name
 	namespace := instance.Namespace
-
-	vsvc := &unstructured.Unstructured{}
-	vsvc.SetAPIVersion("networking.istio.io/v1alpha3")
-	vsvc.SetKind("EnvoyFilter")
-	vsvc.SetName(name)
-	vsvc.SetNamespace(namespace)
-	if err := unstructured.SetNestedStringSlice(vsvc.Object, []string{"*"}, "spec", "hosts"); err != nil {
-		return nil, fmt.Errorf("Set .spec.hosts error: %v", err)
-	}
-
-	// The workloadSelector section of the istio EnvoyFilter spec
-	workloadSelector := map[string]interface{}{
-		"labels": map[string]interface{}{
-			"app.kubernetes.io/name":     req.Name,
-			"app.kubernetes.io/instance": req.Namespace,
-		},
-	}
-	// Add workloadSelector section to istio EnvoyFilter spec
-	if err := unstructured.SetNestedField(vsvc.Object, workloadSelector, "spec", "workloadSelector"); err != nil {
-		return nil, fmt.Errorf("Set .spec.http error: %v", err)
-	}
-
-	// The configPatches section of the istio EnvoyFilter spec
 	var inlineCode = "function envoy_on_response(response_handle, context)\n    response_handle:headers():replace(\"location\", \"\");\nend\n"
-	configPatches := []interface{}{
-		map[string]interface{}{
-			"applyTo": "HTTP_FILTER",
-			"match": map[string]interface{}{
-				"context": "SIDECAR_INBOUND",
-				"listener": map[string]interface{}{
-					"filterChain": map[string]interface{}{
-						"filter": map[string]interface{}{
-							"name": "envoy.filters.network.http_connection_manager",
-							"subFilter": map[string]interface{}{
-								"name": "envoy.filters.http.router",
+
+	envoyFilter := &istioNetworkingClientv1alpha3.EnvoyFilter{
+
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: istioNetworkingv1alpha3.EnvoyFilter{
+			ConfigPatches: []*istioNetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{
+				{
+					ApplyTo: istioNetworkingv1alpha3.EnvoyFilter_HTTP_FILTER,
+					Match: &istioNetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch{
+						Context: istioNetworkingv1alpha3.EnvoyFilter_SIDECAR_INBOUND,
+						ObjectTypes: &istioNetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch_Listener{
+							Listener: &istioNetworkingv1alpha3.EnvoyFilter_ListenerMatch{
+								FilterChain: &istioNetworkingv1alpha3.EnvoyFilter_ListenerMatch_FilterChainMatch{
+									Filter: &istioNetworkingv1alpha3.EnvoyFilter_ListenerMatch_FilterMatch{
+										Name: "envoy.filters.network.http_connection_manager",
+										SubFilter: &istioNetworkingv1alpha3.EnvoyFilter_ListenerMatch_SubFilterMatch{
+											Name: "envoy.filters.http.router",
+										},
+									},
+								},
+							},
+						},
+					},
+					// we use replace on the header so that existing values are overwritten.
+					Patch: &istioNetworkingv1alpha3.EnvoyFilter_Patch{
+						Operation: istioNetworkingv1alpha3.EnvoyFilter_Patch_INSERT_BEFORE,
+						Value: &_struct.Struct{
+							Fields: map[string]*structpb.Value{
+								"name": {
+									Kind: &structpb.Value_StringValue{
+										StringValue: "envoy.lua",
+									},
+								},
+								"typed_config": {
+									Kind: &structpb.Value_StructValue{
+										StructValue: &_struct.Struct{
+											Fields: map[string]*structpb.Value{
+												"@type": {
+													Kind: &structpb.Value_StringValue{
+														StringValue: "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua",
+													},
+												},
+												"inlineCode": {
+													Kind: &structpb.Value_StringValue{
+														StringValue: inlineCode,
+													},
+												},
+											},
+										},
+									},
+								},
 							},
 						},
 					},
 				},
 			},
-			"patch": map[string]interface{}{
-				"operation": "INSERT_BEFORE",
-				"value": map[string]interface{}{
-					"name": "envoy.lua",
-					"typed_config": map[string]interface{}{
-						"@type":      "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua",
-						"inlineCode": string(inlineCode),
-					},
+			WorkloadSelector: &istioNetworkingv1alpha3.WorkloadSelector{
+				Labels: map[string]string{
+					"app.kubernetes.io/name":     name,
+					"app.kubernetes.io/instance": namespace,
 				},
 			},
 		},
 	}
-	// Add configPatches section to istio EnvoyFilter spec
-	if err := unstructured.SetNestedSlice(vsvc.Object, configPatches, "spec", "configPatches"); err != nil {
-		return nil, fmt.Errorf("Set .spec.http error: %v", err)
-	}
 
-	return vsvc, nil
-
+	return envoyFilter, nil
 }
 
-func (r *SparkHistoryServerReconciler) reconcileEnvoyFilter(req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
+func (r *SparkHistoryServerReconciler) reconcileEnvoyFilter(ctx context.Context, req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
 	log.Info("Updating EnvoyFilter")
-	envoyFilter, err := generateEnvoyFilter(req, instance, log)
+	envoyFilter, err := generateEnvoyFilter(instance)
 	if err := ctrl.SetControllerReference(instance, envoyFilter, r.Scheme); err != nil {
 		return err
 	}
 	// Check if the EnvoyFilter already exists.
-	foundEnvoy := &unstructured.Unstructured{}
-	justCreated := false
-	foundEnvoy.SetAPIVersion("networking.istio.io/v1alpha3")
-	foundEnvoy.SetKind("EnvoyFilter")
-	err = r.Get(context.TODO(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, foundEnvoy)
-	if err != nil && apierrs.IsNotFound(err) {
-		justCreated = true
-		if err = r.Create(context.TODO(), envoyFilter); err != nil {
+	var foundEnvoyFilter istioNetworkingClientv1alpha3.EnvoyFilter
+	if err = r.Get(ctx, req.NamespacedName, &foundEnvoyFilter); err != nil {
+		if apierrs.IsNotFound(err) {
+			if err = r.Create(ctx, envoyFilter); err != nil {
+				return err
+			}
+			log.Info("EnvoyFilter created")
+		} else {
+			log.Info("Failed to get EnvoyFilter")
 			return err
 		}
-		log.Info("EnvoyFilter created")
-	} else if err != nil {
-		log.Info("Failed to get EnvoyFilter")
-		return err
-	}
-
-	if !justCreated && CopyEnvoyFilter(envoyFilter, foundEnvoy) {
-		if err = r.Update(context.TODO(), foundEnvoy); err != nil {
+	} else if !reflect.DeepEqual(envoyFilter.Spec, foundEnvoyFilter.Spec) {
+		envoyFilter.ObjectMeta = foundEnvoyFilter.ObjectMeta
+		if err = r.Update(context.TODO(), envoyFilter); err != nil {
 			return err
 		}
 		log.Info("EnvoyFilter updated")
 	}
 
 	return nil
-}
-
-//https://github.com/kubeflow/kubeflow/blob/7f4231de77ea/components/common/reconcilehelper/util.go#L199
-// Copy configuration related fields to another instance and returns true if there
-// is a diff and thus needs to update.
-func CopyEnvoyFilter(from, to *unstructured.Unstructured) bool {
-	fromSpec, found, err := unstructured.NestedMap(from.Object, "spec")
-	if !found {
-		return false
-	}
-	if err != nil {
-		return false
-	}
-
-	toSpec, found, err := unstructured.NestedMap(to.Object, "spec")
-	if !found || err != nil {
-		unstructured.SetNestedMap(to.Object, fromSpec, "spec")
-		return true
-	}
-
-	requiresUpdate := !reflect.DeepEqual(fromSpec, toSpec)
-	if requiresUpdate {
-		unstructured.SetNestedMap(to.Object, fromSpec, "spec")
-	}
-	return requiresUpdate
 }
 
 // Generates Service from CR SparkHistoryServer

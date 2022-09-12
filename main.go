@@ -24,6 +24,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	istioNetworkingClientv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioNetworkingClient "istio.io/client-go/pkg/apis/networking/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -47,6 +48,7 @@ func init() {
 
 	utilruntime.Must(kubricksv1.AddToScheme(scheme))
 	utilruntime.Must(istioNetworkingClient.AddToScheme(scheme))
+	utilruntime.Must(istioNetworkingClientv1alpha3.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
