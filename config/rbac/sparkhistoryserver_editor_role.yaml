@@ -1,0 +1,26 @@
+# permissions for end users to edit sparkhistoryservers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    rbac.authorization.kubeflow.org/aggregate-to-kubeflow-edit: "true"
+  name: sparkhistoryserver-editor-role
+rules:
+- apiGroups:
+  - platform.kubesoup.io
+  resources:
+  - sparkhistoryservers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - platform.kubesoup.io
+  resources:
+  - sparkhistoryservers/status
+  verbs:
+  - get
