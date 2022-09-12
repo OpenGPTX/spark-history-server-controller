@@ -7,7 +7,7 @@ metadata:
   name: sparkhistoryserver-editor-role
 rules:
 - apiGroups:
-  - kubricks.kubricks.io
+  - platform.kubesoup.io
   resources:
   - sparkhistoryservers
   verbs:
@@ -19,7 +19,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - kubricks.kubricks.io
+  - platform.kubesoup.io
   resources:
   - sparkhistoryservers/status
   verbs:

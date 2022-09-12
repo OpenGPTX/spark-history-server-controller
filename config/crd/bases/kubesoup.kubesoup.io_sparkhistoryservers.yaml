@@ -5,9 +5,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.8.0
   creationTimestamp: null
-  name: sparkhistoryservers.kubricks.kubricks.io
+  name: sparkhistoryservers.platform.kubesoup.io
 spec:
-  group: kubricks.kubricks.io
+  group: platform.kubesoup.io
   names:
     kind: SparkHistoryServer
     listKind: SparkHistoryServerList

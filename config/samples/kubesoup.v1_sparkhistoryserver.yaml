@@ -1,4 +1,4 @@
-apiVersion: kubricks.kubricks.io/v1
+apiVersion: platform.kubesoup.io/v1
 kind: SparkHistoryServer
 metadata:
   name: sparkhistoryserver-sample

@@ -8,4 +8,4 @@ webhook:
   port: 9443
 leaderElection:
   leaderElect: true
-  resourceName: c3107e7c.kubricks.io
+  resourceName: c3107e7c.kubesoup.io

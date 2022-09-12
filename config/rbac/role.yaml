@@ -44,32 +44,6 @@ rules:
   verbs:
   - get
 - apiGroups:
-  - kubricks.kubricks.io
-  resources:
-  - sparkhistoryservers
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - kubricks.kubricks.io
-  resources:
-  - sparkhistoryservers/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - kubricks.kubricks.io
-  resources:
-  - sparkhistoryservers/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
   - networking.istio.io
   resources:
   - envoyfilters
@@ -81,3 +55,29 @@ rules:
   - virtualservices
   verbs:
   - '*'
+- apiGroups:
+  - platform.kubesoup.io
+  resources:
+  - sparkhistoryservers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - platform.kubesoup.io
+  resources:
+  - sparkhistoryservers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - platform.kubesoup.io
+  resources:
+  - sparkhistoryservers/status
+  verbs:
+  - get
+  - patch
+  - update

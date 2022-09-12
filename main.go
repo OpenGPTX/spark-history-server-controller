@@ -33,8 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	kubricksv1 "kubricks.io/sparkhistoryserver/api/v1"
-	"kubricks.io/sparkhistoryserver/controllers"
+	kubesoupv1 "kubesoup.io/sparkhistoryserver/api/v1"
+	"kubesoup.io/sparkhistoryserver/controllers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -46,7 +46,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(kubricksv1.AddToScheme(scheme))
+	utilruntime.Must(kubesoupv1.AddToScheme(scheme))
 	utilruntime.Must(istioNetworkingClient.AddToScheme(scheme))
 	utilruntime.Must(istioNetworkingClientv1alpha3.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
@@ -75,7 +75,7 @@ func main() {
 		Port:                   9443,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "c3107e7c.kubricks.io",
+		LeaderElectionID:       "c3107e7c.kubesoup.io",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

@@ -1,4 +1,4 @@
-module kubricks.io/sparkhistoryserver
+module kubesoup.io/sparkhistoryserver
 
 go 1.17
 

@@ -1,16 +1,16 @@
-domain: kubricks.io
+domain: kubesoup.io
 layout:
 - go.kubebuilder.io/v3
 projectName: spark-history-server-controller
-repo: kubricks.io/sparkhistoryserver
+repo: kubesoup.io/sparkhistoryserver
 resources:
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: kubricks.io
-  group: kubricks
+  domain: kubesoup.io
+  group: platform
   kind: SparkHistoryServer
-  path: kubricks.io/sparkhistoryserver/api/v1
+  path: kubesoup.io/sparkhistoryserver/api/v1
   version: v1
 version: "3"

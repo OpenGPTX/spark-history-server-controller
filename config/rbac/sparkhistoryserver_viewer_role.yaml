@@ -5,7 +5,7 @@ metadata:
   name: sparkhistoryserver-viewer-role
 rules:
 - apiGroups:
-  - kubricks.kubricks.io
+  - platform.kubesoup.io
   resources:
   - sparkhistoryservers
   verbs:
@@ -13,7 +13,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - kubricks.kubricks.io
+  - platform.kubesoup.io
   resources:
   - sparkhistoryservers/status
   verbs:

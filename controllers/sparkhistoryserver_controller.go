@@ -42,7 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	kubricksv1 "kubricks.io/sparkhistoryserver/api/v1"
+	kubesoupv1 "kubesoup.io/sparkhistoryserver/api/v1"
 )
 
 const DefaultServingPort = 18080
@@ -56,9 +56,9 @@ type SparkHistoryServerReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=kubricks.kubricks.io,resources=sparkhistoryservers,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kubricks.kubricks.io,resources=sparkhistoryservers/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kubricks.kubricks.io,resources=sparkhistoryservers/finalizers,verbs=update
+//+kubebuilder:rbac:groups=platform.kubesoup.io,resources=sparkhistoryservers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=platform.kubesoup.io,resources=sparkhistoryservers/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=platform.kubesoup.io,resources=sparkhistoryservers/finalizers,verbs=update
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get
@@ -82,7 +82,7 @@ func (r *SparkHistoryServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// If any changes occur then reconcile function will be called.
 	// Get the sparkHistoryServer object on which reconcile is called
-	var sparkHistoryServer kubricksv1.SparkHistoryServer
+	var sparkHistoryServer kubesoupv1.SparkHistoryServer
 	if err := r.Get(ctx, req.NamespacedName, &sparkHistoryServer); err != nil {
 		log.Info("Unable to fetch SparkHistoryServer", "Error", err)
 
@@ -115,12 +115,12 @@ func (r *SparkHistoryServerReconciler) Reconcile(ctx context.Context, req ctrl.R
 // SetupWithManager sets up the controller with the Manager.
 func (r *SparkHistoryServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kubricksv1.SparkHistoryServer{}).
+		For(&kubesoupv1.SparkHistoryServer{}).
 		Complete(r)
 }
 
 // Generates EnvoyFilter from CR SparkHistoryServer
-func generateEnvoyFilter(instance *kubricksv1.SparkHistoryServer) (*istioNetworkingClientv1alpha3.EnvoyFilter, error) {
+func generateEnvoyFilter(instance *kubesoupv1.SparkHistoryServer) (*istioNetworkingClientv1alpha3.EnvoyFilter, error) {
 	name := instance.Name
 	namespace := instance.Namespace
 	var inlineCode = "function envoy_on_response(response_handle, context)\n    response_handle:headers():replace(\"location\", \"\");\nend\n"
@@ -195,7 +195,7 @@ func generateEnvoyFilter(instance *kubricksv1.SparkHistoryServer) (*istioNetwork
 	return envoyFilter, nil
 }
 
-func (r *SparkHistoryServerReconciler) reconcileEnvoyFilter(ctx context.Context, req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
+func (r *SparkHistoryServerReconciler) reconcileEnvoyFilter(ctx context.Context, req ctrl.Request, instance *kubesoupv1.SparkHistoryServer, log logr.Logger) error {
 	log.Info("Updating EnvoyFilter")
 	envoyFilter, err := generateEnvoyFilter(instance)
 	if err := ctrl.SetControllerReference(instance, envoyFilter, r.Scheme); err != nil {
@@ -225,7 +225,7 @@ func (r *SparkHistoryServerReconciler) reconcileEnvoyFilter(ctx context.Context,
 }
 
 // Generates Service from CR SparkHistoryServer
-func generateService(instance *kubricksv1.SparkHistoryServer) (*corev1.Service, error) {
+func generateService(instance *kubesoupv1.SparkHistoryServer) (*corev1.Service, error) {
 	var sparkhistoryserverService *corev1.Service
 	sparkhistoryserverService = &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -255,7 +255,7 @@ func generateService(instance *kubricksv1.SparkHistoryServer) (*corev1.Service, 
 	return sparkhistoryserverService, nil
 }
 
-func (r *SparkHistoryServerReconciler) reconcileService(ctx context.Context, req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
+func (r *SparkHistoryServerReconciler) reconcileService(ctx context.Context, req ctrl.Request, instance *kubesoupv1.SparkHistoryServer, log logr.Logger) error {
 	log.Info("Updating Service")
 	service, err := generateService(instance)
 	if err := ctrl.SetControllerReference(instance, service, r.Scheme); err != nil {
@@ -286,7 +286,7 @@ func (r *SparkHistoryServerReconciler) reconcileService(ctx context.Context, req
 }
 
 // Generates Deployment from CR SparkHistoryServer
-func generateDeployment(instance *kubricksv1.SparkHistoryServer, bucketName string) (*appsv1.Deployment, error) {
+func generateDeployment(instance *kubesoupv1.SparkHistoryServer, bucketName string) (*appsv1.Deployment, error) {
 
 	var sparkhistoryserverDeployment *appsv1.Deployment
 	var historyCommand = "export SPARK_HISTORY_OPTS=\"$SPARK_HISTORY_OPTS \\\n"
@@ -357,7 +357,7 @@ func generateDeployment(instance *kubricksv1.SparkHistoryServer, bucketName stri
 	return sparkhistoryserverDeployment, nil
 }
 
-func (r *SparkHistoryServerReconciler) reconcileDeployment(ctx context.Context, req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
+func (r *SparkHistoryServerReconciler) reconcileDeployment(ctx context.Context, req ctrl.Request, instance *kubesoupv1.SparkHistoryServer, log logr.Logger) error {
 	log.Info("Updating Deployment")
 
 	// Get Bucket name from K8s cluster if it is not defined in the CRD
@@ -409,7 +409,7 @@ func (r *SparkHistoryServerReconciler) reconcileDeployment(ctx context.Context, 
 }
 
 // Generates VirtualService from CR SparkHistoryServer
-func generateVirtualService(instance *kubricksv1.SparkHistoryServer) (*istioNetworkingClient.VirtualService, error) {
+func generateVirtualService(instance *kubesoupv1.SparkHistoryServer) (*istioNetworkingClient.VirtualService, error) {
 
 	name := instance.Name
 	namespace := instance.Namespace
@@ -482,7 +482,7 @@ func generateVirtualService(instance *kubricksv1.SparkHistoryServer) (*istioNetw
 	return virtualservice, nil
 }
 
-func (r *SparkHistoryServerReconciler) reconcileVirtualService(ctx context.Context, req ctrl.Request, instance *kubricksv1.SparkHistoryServer, log logr.Logger) error {
+func (r *SparkHistoryServerReconciler) reconcileVirtualService(ctx context.Context, req ctrl.Request, instance *kubesoupv1.SparkHistoryServer, log logr.Logger) error {
 	log.Info("Updating VirtualService")
 	virtualService, err := generateVirtualService(instance)
 	if err := ctrl.SetControllerReference(instance, virtualService, r.Scheme); err != nil {

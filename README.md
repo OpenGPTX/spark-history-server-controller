@@ -37,7 +37,7 @@ make deploy IMG=public.ecr.aws/atcommons/sparkhistoryservercontroller:dev
 1. Creating a SparkHistoryServer:
 ```
 cat <<EOF | kubectl apply -f -
-apiVersion: kubricks.kubricks.io/v1
+apiVersion: platform.kubesoup.io/v1
 kind: SparkHistoryServer
 metadata:
   name: sparkhistoryserver
@@ -49,7 +49,7 @@ EOF
 
 2. Look that the default values are set correctly `kubectl get SparkHistoryServer sparkhistoryserver -o yaml`:
 ```
-apiVersion: kubricks.kubricks.io/v1
+apiVersion: platform.kubesoup.io/v1
 kind: SparkHistoryServer
 metadata:
   name: sparkhistoryserver
@@ -134,7 +134,7 @@ Click around, google specific K8s resources and you will find the according doc 
 
 We assume, we want to achieve the following CR:
 ```
-apiVersion: kubricks.kubricks.io/v1
+apiVersion: platform.kubesoup.io/v1
 kind: SparkHistoryServer
 metadata:
   name: sparkhistoryserver
@@ -145,22 +145,22 @@ More info about how to get started with kubebuilder can be found [here](https://
 
 [Create a Project:](https://book.kubebuilder.io/quick-start.html#create-a-project)
 ```
-kubebuilder init --domain kubricks.io --repo kubricks.io/sparkhistoryserver
+kubebuilder init --domain kubesoup.io --repo kubesoup.io/sparkhistoryserver
 ```
 What matters?
-- `--domain kubricks.io` = `apiVersion: kubricks.<here>/v1`
-- `--repo kubricks.io/sparkhistoryserver` = `module <here>` in `go.mod`
+- `--domain kubesoup.io` = `apiVersion: kubesoup.<here>/v1`
+- `--repo kubesoup.io/sparkhistoryserver` = `module <here>` in `go.mod`
 
 
 [Create an API:](https://book.kubebuilder.io/quick-start.html#create-an-api)
 ```
-kubebuilder create api --group kubricks --version v1 --kind SparkHistoryServer
+kubebuilder create api --group kubesoup --version v1 --kind SparkHistoryServer
 
 make manifests
 ```
 What matters?
-- `--group kubricks` = `apiVersion: <here>.kubricks.io/v1`
-- `--version v1` = `apiVersion: <here>.kubricks.io/<here>`
+- `--group kubesoup` = `apiVersion: <here>.kubesoup.io/v1`
+- `--version v1` = `apiVersion: <here>.kubesoup.io/<here>`
 - `--kind SparkHistoryServer` = `kind: <here>`
 
 
@@ -214,7 +214,7 @@ To make an affect on your change, do `make deploy`. You will see that it added t
 ```
 That sets the `Replicas` in the CR to `1` if it is not specified. If you specify it, of course it overwrites the default value:
 ```
-apiVersion: kubricks.kubricks.io/v1
+apiVersion: platform.kubesoup.io/v1
 kind: SparkHistoryServer
 metadata:
   name: sparkhistoryserver
@@ -235,7 +235,7 @@ spec:
 If the user does not specify `spec.image` in the CR:
 ```
 cat <<EOF | kubectl apply -f -
-apiVersion: kubricks.kubricks.io/v1
+apiVersion: platform.kubesoup.io/v1
 kind: SparkHistoryServer
 metadata:
   name: sparkhistoryserver
@@ -246,7 +246,7 @@ EOF
 ```
 then the use will get an error:
 ```
-error: error validating "STDIN": error validating data: ValidationError(SparkHistoryServer.spec): missing required field "image" in io.kubricks.kubricks.v1.SparkHistoryServer.spec; if you choose to ignore these errors, turn validation off with --validate=false
+error: error validating "STDIN": error validating data: ValidationError(SparkHistoryServer.spec): missing required field "image" in io.kubesoup.kubesoup.v1.SparkHistoryServer.spec; if you choose to ignore these errors, turn validation off with --validate=false
 ```
 
 
